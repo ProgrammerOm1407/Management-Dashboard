@@ -12,6 +12,18 @@ const BUNDLED_LOCAL_ASSETS: Record<string, string> = {
   [DEFAULT_SUITE_IMAGE]: suiteAsset,
 };
 
+const BASE_PREFIX = import.meta.env.BASE_URL.replace(/\/+$/, '');
+
+function resolveAssetUrl(url: string): string {
+  if (BUNDLED_LOCAL_ASSETS[url]) {
+    return BUNDLED_LOCAL_ASSETS[url];
+  }
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return `${BASE_PREFIX}${url}`;
+  }
+  return url;
+}
+
 interface SafeImageProps {
   src?: string;
   alt: string;
@@ -36,8 +48,7 @@ export const SafeImage: React.FC<SafeImageProps> = ({
   }, [src]);
 
   const trimmed = src ? src.trim() : '';
-  const validSrc =
-    trimmed && isSafeMediaUrl(trimmed) ? BUNDLED_LOCAL_ASSETS[trimmed] || trimmed : '';
+  const validSrc = trimmed && isSafeMediaUrl(trimmed) ? resolveAssetUrl(trimmed) : '';
 
   if (!validSrc || failed) {
     const Icon =
