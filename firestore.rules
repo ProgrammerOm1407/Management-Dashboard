@@ -1,0 +1,857 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Core Primitives
+    // -------------------------------------------------------------------------
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isVerifiedUser() {
+      return isSignedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
+    }
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isSuperAdmin() {
+      return isVerifiedUser() && authEmail() == 'programmerom2006@gmail.com';
+    }
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function isValidSlug(slug) {
+      return slug is string && slug.size() >= 2 && slug.size() <= 64 && slug.matches('^[a-z0-9]+(?:-[a-z0-9]+)*$');
+    }
+    function isValidEmail(val) {
+      return val is string && val.size() >= 3 && val.size() <= 200 && val.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    }
+    function isValidColor(val) {
+      return val is string && val.size() == 7 && val.matches('^#[0-9a-fA-F]{6}$');
+    }
+    function isValidMediaUrl(val) {
+      return val is string && val.size() <= 500
+        && (val == '' || val.matches('^https?://.*') || val.matches('^/src/assets/images/[a-zA-Z0-9_\\-]+\\.(jpg|jpeg|png|webp)$'));
+    }
+    function isValidModules(m) {
+      return m is map
+        && m.keys().hasAll(['menu', 'orders', 'rooms'])
+        && m.keys().hasOnly(['menu', 'orders', 'rooms'])
+        && m.menu is bool
+        && m.orders is bool
+        && m.rooms is bool;
+    }
+    function isValidShopType(t) {
+      return t is string && t in ['cafe', 'restaurant', 'hotel', 'both'];
+    }
+    function isValidUpiId(val) {
+      return val is string && val.size() >= 3 && val.size() <= 128 && val.matches('^[a-zA-Z0-9._\\-]+@[a-zA-Z0-9]+$');
+    }
+
+    // Relational identity lookups (only evaluated after auth + static validation)
+    function shopDoc(shopId) {
+      return get(/databases/$(database)/documents/shops/$(shopId));
+    }
+    function profileDoc() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+    function isShopOwner(shopId) {
+      return isVerifiedUser()
+        && exists(/databases/$(database)/documents/shops/$(shopId))
+        && shopDoc(shopId).data.owner_email == authEmail();
+    }
+    function isShopServer(shopId) {
+      return isVerifiedUser()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && profileDoc().data.role == 'server'
+        && profileDoc().data.shop_id == shopId;
+    }
+    function isShopStaff(shopId) {
+      return isShopOwner(shopId) || isShopServer(shopId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidShop(data, shopId) {
+      return data.keys().hasAll([
+          'id', 'name', 'slug', 'type', 'logo_url', 'primary_color',
+          'description', 'is_active', 'modules', 'owner_email', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'slug', 'type', 'logo_url', 'primary_color',
+          'description', 'is_active', 'modules', 'owner_email',
+          'upi_id', 'upi_payee_name', 'accept_upi', 'accept_cash',
+          'created_at', 'updated_at'
+        ])
+        && data.id == shopId
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && isValidSlug(data.slug)
+        && isValidShopType(data.type)
+        && isValidMediaUrl(data.logo_url)
+        && isValidColor(data.primary_color)
+        && data.description is string && data.description.size() <= 400
+        && data.is_active is bool
+        && isValidModules(data.modules)
+        && isValidEmail(data.owner_email)
+        && (!('upi_id' in data) || data.upi_id == null || isValidUpiId(data.upi_id))
+        && (!('upi_payee_name' in data) || data.upi_payee_name == null || (data.upi_payee_name is string && data.upi_payee_name.size() <= 100))
+        && (!('accept_upi' in data) || data.accept_upi is bool)
+        && (!('accept_cash' in data) || data.accept_cash is bool)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidShopSlug(data, slug) {
+      return data.keys().hasAll([
+          'shop_id', 'name', 'slug', 'type', 'logo_url', 'primary_color',
+          'description', 'is_active', 'modules', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'shop_id', 'name', 'slug', 'type', 'logo_url', 'primary_color',
+          'description', 'is_active', 'modules',
+          'upi_id', 'upi_payee_name', 'accept_upi', 'accept_cash',
+          'updated_at'
+        ])
+        && isValidId(data.shop_id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.slug == slug
+        && isValidShopType(data.type)
+        && isValidMediaUrl(data.logo_url)
+        && isValidColor(data.primary_color)
+        && data.description is string && data.description.size() <= 400
+        && data.is_active is bool
+        && isValidModules(data.modules)
+        && (!('upi_id' in data) || data.upi_id == null || isValidUpiId(data.upi_id))
+        && (!('upi_payee_name' in data) || data.upi_payee_name == null || (data.upi_payee_name is string && data.upi_payee_name.size() <= 100))
+        && (!('accept_upi' in data) || data.accept_upi is bool)
+        && (!('accept_cash' in data) || data.accept_cash is bool)
+        && data.updated_at is timestamp;
+    }
+
+    function isValidProfile(data, uid) {
+      return data.keys().hasAll(['id', 'full_name', 'email', 'role', 'shop_id', 'invite_id', 'created_at', 'updated_at'])
+        && data.keys().hasOnly(['id', 'full_name', 'email', 'role', 'shop_id', 'invite_id', 'created_at', 'updated_at'])
+        && data.id == uid
+        && data.full_name is string && data.full_name.size() >= 1 && data.full_name.size() <= 100
+        && isValidEmail(data.email)
+        && data.role is string && data.role in ['super_admin', 'owner', 'server']
+        && (data.shop_id == null || isValidId(data.shop_id))
+        && (data.invite_id == null || isValidId(data.invite_id))
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidStaffInvite(data, inviteId) {
+      return data.keys().hasAll([
+          'id', 'email', 'full_name', 'role', 'shop_id', 'owner_email',
+          'status', 'user_uid', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'email', 'full_name', 'role', 'shop_id', 'owner_email',
+          'status', 'user_uid', 'created_at', 'updated_at'
+        ])
+        && data.id == inviteId
+        && isValidEmail(data.email)
+        && data.full_name is string && data.full_name.size() >= 1 && data.full_name.size() <= 100
+        && data.role is string && data.role in ['owner', 'server']
+        && isValidId(data.shop_id)
+        && isValidEmail(data.owner_email)
+        && data.status is string && data.status in ['pending', 'active']
+        && (data.user_uid == null || isValidId(data.user_uid))
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidMenuItem(data, shopId, itemId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'name', 'description', 'category', 'price',
+          'image_url', 'is_available', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'name', 'description', 'category', 'price',
+          'image_url', 'is_available', 'stock_count', 'low_stock_threshold',
+          'created_at', 'updated_at'
+        ])
+        && data.id == itemId
+        && data.shop_id == shopId
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.description is string && data.description.size() <= 400
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 60
+        && data.price is number && data.price >= 0 && data.price <= 100000
+        && isValidMediaUrl(data.image_url)
+        && data.is_available is bool
+        && (!('stock_count' in data) || data.stock_count == null || (data.stock_count is int && data.stock_count >= 0 && data.stock_count <= 99999))
+        && (!('low_stock_threshold' in data) || data.low_stock_threshold == null || (data.low_stock_threshold is int && data.low_stock_threshold >= 1 && data.low_stock_threshold <= 9999))
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidOrderItem(item) {
+      return item is map
+        && item.keys().hasAll(['menu_item_id', 'name', 'price', 'quantity'])
+        && item.keys().hasOnly(['menu_item_id', 'name', 'price', 'quantity'])
+        && isValidId(item.menu_item_id)
+        && item.name is string && item.name.size() >= 1 && item.name.size() <= 100
+        && item.price is number && item.price >= 0 && item.price <= 100000
+        && item.quantity is int && item.quantity >= 1 && item.quantity <= 99;
+    }
+
+    function isValidOrder(data, shopId, orderId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'order_number', 'customer_name', 'table_or_room',
+          'items', 'total_amount', 'status', 'source', 'notes',
+          'created_by_uid', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'order_number', 'customer_name', 'table_or_room',
+          'items', 'total_amount', 'status', 'source', 'notes',
+          'created_by_uid', 'payment_method', 'payment_status', 'utr_number', 'paid_at',
+          'created_at', 'updated_at'
+        ])
+        && data.id == orderId
+        && data.shop_id == shopId
+        && data.order_number is string && data.order_number.size() >= 1 && data.order_number.size() <= 32
+        && data.customer_name is string && data.customer_name.size() >= 1 && data.customer_name.size() <= 100
+        && data.table_or_room is string && data.table_or_room.size() >= 1 && data.table_or_room.size() <= 60
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 30 && isValidOrderItem(data.items[0])
+        && data.total_amount is number && data.total_amount >= 0 && data.total_amount <= 1000000
+        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid']
+        && data.source is string && data.source in ['server', 'guest']
+        && data.notes is string && data.notes.size() <= 300
+        && (data.created_by_uid == null || isValidId(data.created_by_uid))
+        && (!('payment_method' in data) || (data.payment_method is string && data.payment_method in ['cash', 'upi']))
+        && (!('payment_status' in data) || (data.payment_status is string && data.payment_status in ['unpaid', 'verification_pending', 'paid']))
+        && (!('utr_number' in data) || data.utr_number == null || (data.utr_number is string && data.utr_number.size() <= 64))
+        && (!('paid_at' in data) || data.paid_at == null || data.paid_at is timestamp)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidOrderTracker(data, shopId, orderId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'order_number', 'table_or_room',
+          'items', 'total_amount', 'status', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'order_number', 'table_or_room',
+          'items', 'total_amount', 'status', 'payment_method', 'payment_status', 'paid_at',
+          'created_at', 'updated_at'
+        ])
+        && data.id == orderId
+        && data.shop_id == shopId
+        && data.order_number is string && data.order_number.size() >= 1 && data.order_number.size() <= 32
+        && data.table_or_room is string && data.table_or_room.size() >= 1 && data.table_or_room.size() <= 60
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 30 && isValidOrderItem(data.items[0])
+        && data.total_amount is number && data.total_amount >= 0 && data.total_amount <= 1000000
+        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid']
+        && (!('payment_method' in data) || (data.payment_method is string && data.payment_method in ['cash', 'upi']))
+        && (!('payment_status' in data) || (data.payment_status is string && data.payment_status in ['unpaid', 'verification_pending', 'paid']))
+        && (!('paid_at' in data) || data.paid_at == null || data.paid_at is timestamp)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidOrderTransition(prevStatus, nextStatus) {
+      return (prevStatus == 'pending' && nextStatus == 'preparing')
+        || (prevStatus == 'preparing' && nextStatus == 'ready')
+        || (prevStatus == 'ready' && nextStatus == 'served')
+        || (prevStatus == 'served' && nextStatus == 'paid');
+    }
+
+    function isValidRoom(data, shopId, roomId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'room_number', 'title', 'room_type', 'nightly_rate',
+          'capacity', 'status', 'amenities', 'image_url', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'room_number', 'title', 'room_type', 'nightly_rate',
+          'capacity', 'status', 'amenities', 'image_url', 'created_at', 'updated_at'
+        ])
+        && data.id == roomId
+        && data.shop_id == shopId
+        && data.room_number is string && data.room_number.size() >= 1 && data.room_number.size() <= 24
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 100
+        && data.room_type is string && data.room_type.size() >= 1 && data.room_type.size() <= 60
+        && data.nightly_rate is number && data.nightly_rate >= 0 && data.nightly_rate <= 100000
+        && data.capacity is int && data.capacity >= 1 && data.capacity <= 20
+        && data.status is string && data.status in ['available', 'occupied', 'maintenance']
+        && data.amenities is list && data.amenities.size() <= 10
+        && (data.amenities.size() == 0 || (data.amenities[0] is string && data.amenities[0].size() <= 60))
+        && isValidMediaUrl(data.image_url)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidBooking(data, shopId, bookingId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'room_id', 'room_number', 'guest_name', 'guest_contact',
+          'check_in', 'check_out', 'status', 'total_price', 'notes', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'room_id', 'room_number', 'guest_name', 'guest_contact',
+          'check_in', 'check_out', 'status', 'total_price', 'notes',
+          'payment_method', 'payment_status', 'utr_number', 'paid_at',
+          'created_at', 'updated_at'
+        ])
+        && data.id == bookingId
+        && data.shop_id == shopId
+        && isValidId(data.room_id)
+        && data.room_number is string && data.room_number.size() >= 1 && data.room_number.size() <= 24
+        && data.guest_name is string && data.guest_name.size() >= 1 && data.guest_name.size() <= 100
+        && data.guest_contact is string && data.guest_contact.size() >= 1 && data.guest_contact.size() <= 120
+        && data.check_in is string && data.check_in.size() >= 8 && data.check_in.size() <= 20
+        && data.check_out is string && data.check_out.size() >= 8 && data.check_out.size() <= 20
+        && data.status is string && data.status in ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled']
+        && data.total_price is number && data.total_price >= 0 && data.total_price <= 1000000
+        && data.notes is string && data.notes.size() <= 300
+        && (!('payment_method' in data) || (data.payment_method is string && data.payment_method in ['cash', 'upi']))
+        && (!('payment_status' in data) || (data.payment_status is string && data.payment_status in ['unpaid', 'verification_pending', 'paid']))
+        && (!('utr_number' in data) || data.utr_number == null || (data.utr_number is string && data.utr_number.size() <= 64))
+        && (!('paid_at' in data) || data.paid_at == null || data.paid_at is timestamp)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidRoomAvailability(data, shopId, bookingId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'room_id', 'check_in', 'check_out', 'status', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'room_id', 'check_in', 'check_out', 'status', 'updated_at'
+        ])
+        && data.id == bookingId
+        && data.shop_id == shopId
+        && isValidId(data.room_id)
+        && data.check_in is string && data.check_in.size() >= 8 && data.check_in.size() <= 20
+        && data.check_out is string && data.check_out.size() >= 8 && data.check_out.size() <= 20
+        && data.status is string && data.status in ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled']
+        && data.updated_at is timestamp;
+    }
+
+    function isValidBookingTransition(prevStatus, nextStatus) {
+      return (prevStatus == 'pending' && nextStatus in ['confirmed', 'checked_in', 'cancelled'])
+        || (prevStatus == 'confirmed' && nextStatus in ['checked_in', 'cancelled'])
+        || (prevStatus == 'checked_in' && nextStatus == 'checked_out');
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection: /shop_slugs/{slug} (Public PII-Free Storefront Lookup)
+    // -------------------------------------------------------------------------
+    match /shop_slugs/{slug} {
+      allow get: if isValidSlug(slug);
+      allow list: if false;
+      allow create: if isSuperAdmin()
+        && isValidSlug(slug)
+        && isValidShopSlug(incoming(), slug)
+        && incoming().updated_at == request.time;
+      allow update: if isVerifiedUser()
+        && isValidSlug(slug)
+        && isValidShopSlug(incoming(), slug)
+        && incoming().shop_id == existing().shop_id
+        && incoming().slug == existing().slug
+        && incoming().updated_at == request.time
+        && (
+          isSuperAdmin()
+          || (
+            isShopOwner(existing().shop_id)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'logo_url', 'primary_color', 'description', 'upi_id', 'upi_payee_name', 'accept_upi', 'accept_cash', 'updated_at'])
+          )
+        );
+      allow delete: if isSuperAdmin() && isValidSlug(slug);
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection: /profiles/{uid} (PII & RBAC Identity)
+    // -------------------------------------------------------------------------
+    match /profiles/{uid} {
+      allow get: if isVerifiedUser() && isValidId(uid) && (request.auth.uid == uid || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(uid)
+        && request.auth.uid == uid
+        && isValidProfile(incoming(), uid)
+        && incoming().email == authEmail()
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time
+        && (
+          (isSuperAdmin() && incoming().role == 'super_admin' && incoming().shop_id == null && incoming().invite_id == null)
+          || (
+            incoming().role in ['owner', 'server']
+            && incoming().shop_id is string
+            && incoming().invite_id is string
+            && exists(/databases/$(database)/documents/staff_invites/$(incoming().invite_id))
+            && get(/databases/$(database)/documents/staff_invites/$(incoming().invite_id)).data.email == authEmail()
+            && get(/databases/$(database)/documents/staff_invites/$(incoming().invite_id)).data.role == incoming().role
+            && get(/databases/$(database)/documents/staff_invites/$(incoming().invite_id)).data.shop_id == incoming().shop_id
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(uid)
+        && isValidProfile(incoming(), uid)
+        && incoming().id == existing().id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && (
+          isSuperAdmin()
+          || (
+            request.auth.uid == uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['full_name', 'updated_at'])
+          )
+        );
+      allow delete: if isSuperAdmin() && isValidId(uid);
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection: /staff_invites/{inviteId}
+    // -------------------------------------------------------------------------
+    match /staff_invites/{inviteId} {
+      allow get: if isVerifiedUser()
+        && isValidId(inviteId)
+        && (isSuperAdmin() || existing().email == authEmail() || existing().owner_email == authEmail());
+      allow list: if isSuperAdmin()
+        || (isVerifiedUser() && (resource.data.email == authEmail() || resource.data.owner_email == authEmail()));
+      allow create: if isVerifiedUser()
+        && isValidId(inviteId)
+        && isValidStaffInvite(incoming(), inviteId)
+        && incoming().status == 'pending'
+        && incoming().user_uid == null
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time
+        && existsAfter(/databases/$(database)/documents/shops/$(incoming().shop_id))
+        && (
+          isSuperAdmin()
+          || (
+            incoming().role == 'server'
+            && incoming().owner_email == authEmail()
+            && isShopOwner(incoming().shop_id)
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(inviteId)
+        && isValidStaffInvite(incoming(), inviteId)
+        && incoming().id == existing().id
+        && incoming().shop_id == existing().shop_id
+        && incoming().email == existing().email
+        && incoming().role == existing().role
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && (
+          isSuperAdmin()
+          || (
+            existing().email == authEmail()
+            && existing().status == 'pending'
+            && incoming().status == 'active'
+            && incoming().user_uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'user_uid', 'updated_at'])
+          )
+          || (
+            existing().owner_email == authEmail()
+            && existing().role == 'server'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['full_name', 'updated_at'])
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidId(inviteId)
+        && (
+          isSuperAdmin()
+          || (existing().owner_email == authEmail() && existing().role == 'server')
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection: /shops/{shopId} (Tenant Configuration & Subcollections)
+    // -------------------------------------------------------------------------
+    match /shops/{shopId} {
+      allow get: if isVerifiedUser() && isValidId(shopId) && (isSuperAdmin() || isShopStaff(shopId));
+      allow list: if isSuperAdmin() || (isVerifiedUser() && resource.data.owner_email == authEmail());
+      allow create: if isSuperAdmin()
+        && isValidId(shopId)
+        && isValidShop(incoming(), shopId)
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(shopId)
+        && isValidShop(incoming(), shopId)
+        && incoming().id == existing().id
+        && incoming().slug == existing().slug
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && (
+          isSuperAdmin()
+          || (
+            isShopOwner(shopId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'logo_url', 'primary_color', 'description', 'upi_id', 'upi_payee_name', 'accept_upi', 'accept_cash', 'updated_at'])
+          )
+        );
+      allow delete: if isSuperAdmin() && isValidId(shopId);
+
+      // Subcollection: Menu Items (Owner CRUD; Server & Public Storefront Read)
+      match /menu_items/{itemId} {
+        allow get: if isValidId(shopId) && isValidId(itemId);
+        allow list: if resource.data.shop_id == shopId;
+        allow create: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(itemId)
+          && isValidMenuItem(incoming(), shopId, itemId)
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && (isSuperAdmin() || isShopOwner(shopId));
+        allow update: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(itemId)
+          && isValidMenuItem(incoming(), shopId, itemId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            isSuperAdmin()
+            || (
+              isShopOwner(shopId)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'category', 'price', 'image_url', 'is_available', 'stock_count', 'low_stock_threshold', 'updated_at'])
+            )
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(itemId)
+          && (isSuperAdmin() || isShopOwner(shopId));
+      }
+
+      // Subcollection: Orders (Realtime Stream; Server Create & Status Update; Staff Payment Verify; Owner Read; Public Guest Create)
+      match /orders/{orderId} {
+        allow get: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(orderId)
+          && (isSuperAdmin() || isShopStaff(shopId));
+        allow list: if isSuperAdmin()
+          || (isVerifiedUser() && resource.data.shop_id == shopId && isShopStaff(shopId));
+        allow create: if isValidId(shopId)
+          && isValidId(orderId)
+          && isValidOrder(incoming(), shopId, orderId)
+          && incoming().status == 'pending'
+          && (!('paid_at' in incoming()) || incoming().paid_at == null)
+          && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && exists(/databases/$(database)/documents/shops/$(shopId))
+          && shopDoc(shopId).data.is_active == true
+          && shopDoc(shopId).data.modules.orders == true
+          && (
+            (isSuperAdmin() && incoming().source in ['server', 'guest'])
+            || (isShopStaff(shopId) && incoming().source == 'server' && incoming().created_by_uid == request.auth.uid)
+            || (incoming().source == 'guest' && (incoming().created_by_uid == null || (isSignedIn() && incoming().created_by_uid == request.auth.uid)))
+          );
+        allow update: if isValidId(shopId)
+          && isValidId(orderId)
+          && isValidOrder(incoming(), shopId, orderId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().order_number == existing().order_number
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            (
+              isVerifiedUser()
+              && (
+                isSuperAdmin()
+                || (
+                  isShopStaff(shopId)
+                  && existing().status != 'paid'
+                  && isValidOrderTransition(existing().status, incoming().status)
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopStaff(shopId)
+                  && existing().status == 'served'
+                  && incoming().status == 'paid'
+                  && incoming().payment_status == 'paid'
+                  && incoming().paid_at == request.time
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_status', 'paid_at', 'updated_at'])
+                )
+                || (
+                  isShopStaff(shopId)
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().payment_status == 'paid'
+                  && incoming().paid_at == request.time
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_status', 'paid_at', 'updated_at'])
+                )
+              )
+            )
+            || (
+              existing().source == 'guest'
+              && existing().status != 'paid'
+              && incoming().source == 'guest'
+              && incoming().customer_name == existing().customer_name
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().created_by_uid == existing().created_by_uid
+              && incoming().status == 'pending'
+              && incoming().items.size() >= existing().items.size()
+              && incoming().total_amount >= existing().total_amount
+              && (!('paid_at' in incoming()) || incoming().paid_at == null)
+              && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+              && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'notes', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+            )
+            || (
+              existing().source == 'guest'
+              && existing().status != 'paid'
+              && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+              && incoming().source == 'guest'
+              && incoming().customer_name == existing().customer_name
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().created_by_uid == existing().created_by_uid
+              && incoming().status == existing().status
+              && incoming().items == existing().items
+              && incoming().total_amount == existing().total_amount
+              && incoming().notes == existing().notes
+              && incoming().payment_method in ['cash', 'upi']
+              && incoming().payment_status in ['unpaid', 'verification_pending']
+              && (!('paid_at' in incoming()) || incoming().paid_at == null)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+            )
+          );
+        allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(orderId);
+      }
+
+      // Subcollection: PII-Free Order Trackers (Direct Get by Order ID for Public Guests; No List)
+      match /order_trackers/{orderId} {
+        allow get: if isValidId(shopId) && isValidId(orderId);
+        allow list: if false;
+        allow create: if isValidId(shopId)
+          && isValidId(orderId)
+          && isValidOrderTracker(incoming(), shopId, orderId)
+          && incoming().status == 'pending'
+          && (!('paid_at' in incoming()) || incoming().paid_at == null)
+          && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && exists(/databases/$(database)/documents/shops/$(shopId))
+          && shopDoc(shopId).data.is_active == true
+          && shopDoc(shopId).data.modules.orders == true
+          && existsAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId));
+        allow update: if isValidId(shopId)
+          && isValidId(orderId)
+          && isValidOrderTracker(incoming(), shopId, orderId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().order_number == existing().order_number
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            (
+              isVerifiedUser()
+              && (
+                isSuperAdmin()
+                || (
+                  isShopStaff(shopId)
+                  && existing().status != 'paid'
+                  && isValidOrderTransition(existing().status, incoming().status)
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopStaff(shopId)
+                  && existing().status == 'served'
+                  && incoming().status == 'paid'
+                  && incoming().payment_status == 'paid'
+                  && incoming().paid_at == request.time
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_status', 'paid_at', 'updated_at'])
+                )
+                || (
+                  isShopStaff(shopId)
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().payment_status == 'paid'
+                  && incoming().paid_at == request.time
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_status', 'paid_at', 'updated_at'])
+                )
+              )
+            )
+            || (
+              existing().status != 'paid'
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().status == 'pending'
+              && incoming().items.size() >= existing().items.size()
+              && incoming().total_amount >= existing().total_amount
+              && (!('paid_at' in incoming()) || incoming().paid_at == null)
+              && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+              && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.total_amount == incoming().total_amount
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.status == 'pending'
+            )
+            || (
+              existing().status != 'paid'
+              && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().status == existing().status
+              && incoming().items == existing().items
+              && incoming().total_amount == existing().total_amount
+              && incoming().payment_method in ['cash', 'upi']
+              && incoming().payment_status in ['unpaid', 'verification_pending']
+              && (!('paid_at' in incoming()) || incoming().paid_at == null)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_method == incoming().payment_method
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_status == incoming().payment_status
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.total_amount == existing().total_amount
+            )
+          );
+        allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(orderId);
+      }
+
+      // Subcollection: Rooms (Owner CRUD; Reception Status Update; Public Storefront Read)
+      match /rooms/{roomId} {
+        allow get: if isValidId(shopId) && isValidId(roomId);
+        allow list: if resource.data.shop_id == shopId;
+        allow create: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(roomId)
+          && isValidRoom(incoming(), shopId, roomId)
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && (isSuperAdmin() || (isShopOwner(shopId) && shopDoc(shopId).data.modules.rooms == true));
+        allow update: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(roomId)
+          && isValidRoom(incoming(), shopId, roomId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            isSuperAdmin()
+            || (
+              isShopOwner(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && incoming().diff(existing()).affectedKeys().hasOnly(['room_number', 'title', 'room_type', 'nightly_rate', 'capacity', 'status', 'amenities', 'image_url', 'updated_at'])
+            )
+            || (
+              isShopServer(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+            )
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(roomId)
+          && (isSuperAdmin() || (isShopOwner(shopId) && shopDoc(shopId).data.modules.rooms == true));
+      }
+
+      // Subcollection: Room Bookings (Staff Read/Update; Public Guest Pending Create; PII Protected)
+      match /room_bookings/{bookingId} {
+        allow get: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(bookingId)
+          && (isSuperAdmin() || isShopStaff(shopId));
+        allow list: if isSuperAdmin()
+          || (isVerifiedUser() && resource.data.shop_id == shopId && isShopStaff(shopId));
+        allow create: if isValidId(shopId)
+          && isValidId(bookingId)
+          && isValidBooking(incoming(), shopId, bookingId)
+          && (!('paid_at' in incoming()) || incoming().paid_at == null)
+          && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && exists(/databases/$(database)/documents/shops/$(shopId))
+          && shopDoc(shopId).data.is_active == true
+          && shopDoc(shopId).data.modules.rooms == true
+          && exists(/databases/$(database)/documents/shops/$(shopId)/rooms/$(incoming().room_id))
+          && (
+            (isSuperAdmin() && incoming().status in ['pending', 'confirmed'])
+            || (isShopStaff(shopId) && incoming().status in ['pending', 'confirmed'])
+            || incoming().status == 'pending'
+          );
+        allow update: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(bookingId)
+          && isValidBooking(incoming(), shopId, bookingId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().room_id == existing().room_id
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            isSuperAdmin()
+            || (
+              isShopOwner(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && existing().status != 'checked_out'
+              && existing().status != 'cancelled'
+              && incoming().diff(existing()).affectedKeys().hasOnly(['guest_name', 'guest_contact', 'check_in', 'check_out', 'status', 'total_price', 'notes', 'updated_at'])
+            )
+            || (
+              isShopServer(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && existing().status != 'checked_out'
+              && existing().status != 'cancelled'
+              && isValidBookingTransition(existing().status, incoming().status)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+            )
+            || (
+              isShopStaff(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && existing().status != 'cancelled'
+              && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+              && incoming().payment_status == 'paid'
+              && incoming().paid_at == request.time
+              && incoming().diff(existing()).affectedKeys().hasOnly(['payment_status', 'paid_at', 'updated_at'])
+            )
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(bookingId)
+          && (isSuperAdmin() || (isShopOwner(shopId) && shopDoc(shopId).data.modules.rooms == true));
+      }
+
+      // Subcollection: PII-Free Room Availability Intervals (Public Read for Date Filtering; Atomic Sync)
+      match /room_availability/{bookingId} {
+        allow get: if isValidId(shopId) && isValidId(bookingId);
+        allow list: if resource.data.shop_id == shopId;
+        allow create: if isValidId(shopId)
+          && isValidId(bookingId)
+          && isValidRoomAvailability(incoming(), shopId, bookingId)
+          && incoming().updated_at == request.time
+          && exists(/databases/$(database)/documents/shops/$(shopId))
+          && shopDoc(shopId).data.is_active == true
+          && shopDoc(shopId).data.modules.rooms == true
+          && existsAfter(/databases/$(database)/documents/shops/$(shopId)/room_bookings/$(bookingId));
+        allow update: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(bookingId)
+          && isValidRoomAvailability(incoming(), shopId, bookingId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().room_id == existing().room_id
+          && incoming().updated_at == request.time
+          && (
+            isSuperAdmin()
+            || (
+              isShopStaff(shopId)
+              && shopDoc(shopId).data.modules.rooms == true
+              && incoming().diff(existing()).affectedKeys().hasOnly(['check_in', 'check_out', 'status', 'updated_at'])
+            )
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(bookingId)
+          && (isSuperAdmin() || (isShopOwner(shopId) && shopDoc(shopId).data.modules.rooms == true));
+      }
+    }
+  }
+}

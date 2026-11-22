@@ -1,0 +1,251 @@
+{
+  "entities": {
+    "Shop": {
+      "title": "Shop",
+      "description": "A tenant business (cafe, restaurant, hotel, or hybrid) onboarded onto the multi-tenant SaaS platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "type": { "type": "string", "enum": ["cafe", "restaurant", "hotel", "both"] },
+        "logo_url": { "type": "string", "maxLength": 500 },
+        "primary_color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "description": { "type": "string", "maxLength": 400 },
+        "is_active": { "type": "boolean" },
+        "modules": { "type": "object", "description": "Enabled feature modules: { menu: boolean, orders: boolean, rooms: boolean }" },
+        "owner_email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 200 },
+        "upi_id": { "type": "string", "minLength": 3, "maxLength": 128, "pattern": "^[a-zA-Z0-9._\\-]+@[a-zA-Z0-9]+$", "description": "Optional merchant UPI VPA (e.g. mycafe@okicici)." },
+        "upi_payee_name": { "type": "string", "maxLength": 100, "description": "Optional business payee name shown in UPI apps." },
+        "accept_upi": { "type": "boolean", "description": "Whether dynamic UPI QR checkout is enabled (defaults to false)." },
+        "accept_cash": { "type": "boolean", "description": "Whether cash at counter/desk is enabled (defaults to true)." },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "slug", "type", "logo_url", "primary_color", "description", "is_active", "modules", "owner_email", "created_at", "updated_at"]
+    },
+    "ShopSlug": {
+      "title": "ShopSlug",
+      "description": "Public, PII-free storefront registry enforcing slug uniqueness and serving /s/[slug].",
+      "type": "object",
+      "properties": {
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "slug": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "type": { "type": "string", "enum": ["cafe", "restaurant", "hotel", "both"] },
+        "logo_url": { "type": "string", "maxLength": 500 },
+        "primary_color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "description": { "type": "string", "maxLength": 400 },
+        "is_active": { "type": "boolean" },
+        "modules": { "type": "object" },
+        "upi_id": { "type": "string", "minLength": 3, "maxLength": 128, "pattern": "^[a-zA-Z0-9._\\-]+@[a-zA-Z0-9]+$" },
+        "upi_payee_name": { "type": "string", "maxLength": 100 },
+        "accept_upi": { "type": "boolean" },
+        "accept_cash": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shop_id", "name", "slug", "type", "logo_url", "primary_color", "description", "is_active", "modules", "updated_at"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Authenticated user profile with role-based access control and tenant shop_id assignment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "full_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 200 },
+        "role": { "type": "string", "enum": ["super_admin", "owner", "server"] },
+        "shop_id": { "type": "string", "maxLength": 128 },
+        "invite_id": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "full_name", "email", "role", "created_at", "updated_at"]
+    },
+    "StaffInvite": {
+      "title": "StaffInvite",
+      "description": "Role-bound invitation linking an email address to a specific shop_id and role prior to or after sign-in.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 200 },
+        "full_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "role": { "type": "string", "enum": ["owner", "server"] },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "owner_email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 200 },
+        "status": { "type": "string", "enum": ["pending", "active"] },
+        "user_uid": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "full_name", "role", "shop_id", "owner_email", "status", "created_at", "updated_at"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "A menu offering isolated to a specific shop_id.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 400 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "price": { "type": "number" },
+        "image_url": { "type": "string", "maxLength": 500 },
+        "is_available": { "type": "boolean" },
+        "stock_count": { "type": "integer", "description": "Optional manual inventory count (0 marks item out of stock; null means untracked/unlimited)." },
+        "low_stock_threshold": { "type": "integer", "description": "Optional threshold at or below which an item is highlighted as low stock (defaults to 5)." },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "name", "description", "category", "price", "image_url", "is_available", "created_at", "updated_at"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Real-time customer or server-created order isolated by shop_id.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "order_number": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "customer_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "table_or_room": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "items": { "type": "array", "description": "Bounded list of ordered item snapshots (1-30 items)" },
+        "total_amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "ready", "served", "paid"] },
+        "source": { "type": "string", "enum": ["server", "guest"] },
+        "notes": { "type": "string", "maxLength": 300 },
+        "created_by_uid": { "type": "string", "maxLength": 128 },
+        "payment_method": { "type": "string", "enum": ["cash", "upi"] },
+        "payment_status": { "type": "string", "enum": ["unpaid", "verification_pending", "paid"] },
+        "utr_number": { "type": "string", "maxLength": 64 },
+        "paid_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "order_number", "customer_name", "table_or_room", "items", "total_amount", "status", "source", "notes", "created_at", "updated_at"]
+    },
+    "OrderTracker": {
+      "title": "OrderTracker",
+      "description": "PII-free real-time order status tracker readable by direct order ID for public storefront guests.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "order_number": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "table_or_room": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "items": { "type": "array", "description": "Bounded list of ordered item snapshots (1-30 items)" },
+        "total_amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "ready", "served", "paid"] },
+        "payment_method": { "type": "string", "enum": ["cash", "upi"] },
+        "payment_status": { "type": "string", "enum": ["unpaid", "verification_pending", "paid"] },
+        "paid_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "order_number", "table_or_room", "items", "total_amount", "status", "created_at", "updated_at"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Hospitality room inventory item owned and managed strictly by shop owners when rooms module is enabled.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "room_number": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "room_type": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "nightly_rate": { "type": "number" },
+        "capacity": { "type": "integer" },
+        "status": { "type": "string", "enum": ["available", "occupied", "maintenance"] },
+        "amenities": { "type": "array" },
+        "image_url": { "type": "string", "maxLength": 500 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "room_number", "title", "room_type", "nightly_rate", "capacity", "status", "amenities", "image_url", "created_at", "updated_at"]
+    },
+    "RoomBooking": {
+      "title": "RoomBooking",
+      "description": "Guest room reservation managed by shop owners and reception staff, with public guest booking requests.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "room_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "room_number": { "type": "string", "minLength": 1, "maxLength": 24 },
+        "guest_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "guest_contact": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "check_in": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "check_out": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "checked_in", "checked_out", "cancelled"] },
+        "total_price": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 300 },
+        "payment_method": { "type": "string", "enum": ["cash", "upi"] },
+        "payment_status": { "type": "string", "enum": ["unpaid", "verification_pending", "paid"] },
+        "utr_number": { "type": "string", "maxLength": 64 },
+        "paid_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "room_id", "room_number", "guest_name", "guest_contact", "check_in", "check_out", "status", "total_price", "notes", "created_at", "updated_at"]
+    },
+    "RoomAvailability": {
+      "title": "RoomAvailability",
+      "description": "PII-free room booking date interval mirrored from RoomBooking for public storefront date filtering.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "shop_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "room_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "check_in": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "check_out": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "checked_in", "checked_out", "cancelled"] },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shop_id", "room_id", "check_in", "check_out", "status", "updated_at"]
+    }
+  },
+  "firestore": {
+    "/shops/{shopId}": {
+      "schema": { "$ref": "#/entities/Shop" },
+      "description": "Private tenant shop records readable by super admin and shop staff."
+    },
+    "/shop_slugs/{slug}": {
+      "schema": { "$ref": "#/entities/ShopSlug" },
+      "description": "Public PII-free storefront lookup by unique slug."
+    },
+    "/profiles/{uid}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "User profiles keyed by Firebase Auth UID with immutable RBAC fields."
+    },
+    "/staff_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/StaffInvite" },
+      "description": "Scoped owner and server invitations bound to shop_id."
+    },
+    "/shops/{shopId}/menu_items/{itemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Shop-isolated menu catalog items."
+    },
+    "/shops/{shopId}/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Shop-isolated real-time order queue."
+    },
+    "/shops/{shopId}/order_trackers/{orderId}": {
+      "schema": { "$ref": "#/entities/OrderTracker" },
+      "description": "PII-free real-time order status tracker readable by direct order ID."
+    },
+    "/shops/{shopId}/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Shop-isolated hotel room inventory."
+    },
+    "/shops/{shopId}/room_bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/RoomBooking" },
+      "description": "Shop-isolated guest room reservations (Staff read/update; Public guest pending create)."
+    },
+    "/shops/{shopId}/room_availability/{bookingId}": {
+      "schema": { "$ref": "#/entities/RoomAvailability" },
+      "description": "PII-free booked date intervals for public storefront room availability filtering."
+    }
+  }
+}

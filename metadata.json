@@ -1,0 +1,6 @@
+{
+  "name": "HostGrid",
+  "description": "Multi-tenant SaaS shop management platform for cafes, restaurants, and hotels with role-based access control, real-time order tracking, analytics, and branded guest storefronts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
