@@ -40,7 +40,8 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
   const accent = shop.primary_color || '#2563EB';
 
   const filteredOrders = useMemo(() => {
-    if (timeframe === 'all') return orders;
+    const validOrders = orders.filter((o) => o.status !== 'cancelled');
+    if (timeframe === 'all') return validOrders;
     const now = new Date();
     const cutoff = new Date(now);
     if (timeframe === 'today') {
@@ -50,7 +51,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
     } else {
       cutoff.setDate(now.getDate() - 30);
     }
-    return orders.filter((o) => getOrderDate(o) >= cutoff);
+    return validOrders.filter((o) => getOrderDate(o) >= cutoff);
   }, [orders, timeframe]);
 
   const kpis = useMemo(() => {

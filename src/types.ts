@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'super_admin' | 'owner' | 'server';
 export type ShopType = 'cafe' | 'restaurant' | 'hotel' | 'both';
-export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid';
+export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled';
 export type OrderSource = 'server' | 'guest';
 export type RoomStatus = 'available' | 'occupied' | 'maintenance';
 export type BookingStatus = 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';
@@ -102,6 +102,7 @@ export interface Order {
   shop_id: string;
   order_number: string;
   customer_name: string;
+  customer_phone?: string | null;
   table_or_room: string;
   items: OrderItem[];
   total_amount: number;
@@ -128,6 +129,20 @@ export interface OrderTracker {
   payment_method?: PaymentMethod;
   payment_status?: PaymentStatus;
   paid_at?: Timestamp | null;
+  created_at: Timestamp | null;
+  updated_at: Timestamp | null;
+}
+
+export interface ShopCustomer {
+  id: string;
+  shop_id: string;
+  full_name: string;
+  mobile_number: string;
+  email: string;
+  reward_points: number;
+  total_orders: number;
+  total_spent: number;
+  last_order_at: Timestamp | null;
   created_at: Timestamp | null;
   updated_at: Timestamp | null;
 }
@@ -210,6 +225,8 @@ export const DEFAULT_DISH_IMAGE = '/src/assets/images/culinary_dish_plate_179532
 export const DEFAULT_SUITE_IMAGE = '/src/assets/images/boutique_hotel_suite_1795324939826.jpg';
 
 export const ORDER_STATUS_FLOW: OrderStatus[] = ['pending', 'preparing', 'ready', 'served', 'paid'];
+export const KITCHEN_KANBAN_STAGES: OrderStatus[] = ['pending', 'preparing', 'ready'];
+export const KITCHEN_ACTIVE_STAGES: OrderStatus[] = ['pending', 'preparing', 'ready', 'served'];
 
 export const NEXT_ORDER_STATUS: Record<OrderStatus, OrderStatus | null> = {
   pending: 'preparing',
@@ -217,4 +234,5 @@ export const NEXT_ORDER_STATUS: Record<OrderStatus, OrderStatus | null> = {
   ready: 'served',
   served: 'paid',
   paid: null,
+  cancelled: null,
 };

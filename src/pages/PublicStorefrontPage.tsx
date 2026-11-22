@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowRight,
+  Award,
+  Ban,
   Banknote,
   BedDouble,
   CalendarDays,
@@ -13,21 +16,27 @@ import {
   Plus,
   QrCode,
   Receipt,
+  ShieldCheck,
   ShoppingBag,
   Store,
+  UserCheck,
   Users,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
 import {
   appendItemsToGuestOrder,
+  cancelOrder,
   createRoomBooking,
   createShopOrder,
   getOrderTracker,
+  registerShopCustomer,
   submitGuestOrderPayment,
+  subscribeCustomerOrders,
   subscribeMenuItems,
   subscribeOrderTracker,
   subscribeRoomAvailability,
+  subscribeShopCustomer,
   subscribeShopRooms,
   subscribeShopSlugRecord,
 } from '../lib/firestoreService';
@@ -46,9 +55,17 @@ import {
   isShopCashEnabled,
   isShopUpiEnabled,
 } from '../lib/upi';
-import { formatCurrency, getShopTypeLabel } from '../lib/validation';
+import {
+  formatCurrency,
+  formatIndianMobile,
+  getShopTypeLabel,
+  validateCustomerName,
+  validateIndianMobile,
+  validateTableOrRoom,
+} from '../lib/validation';
 import {
   MenuItem,
+  Order,
   ORDER_STATUS_FLOW,
   OrderItem,
   OrderStatus,
@@ -57,10 +74,12 @@ import {
   Room,
   RoomAvailability,
   RoomBooking,
+  ShopCustomer,
   ShopSlugRecord,
 } from '../types';
 import { SafeImage } from '../components/SafeImage';
 import { UpiPaymentBox } from '../components/UpiPaymentBox';
+import { CustomerAccountDrawer } from '../components/CustomerAccountDrawer';
 import { useAuth } from '../context/AuthContext';
 import {
   deserializeOrderTracker,
@@ -131,7 +150,7 @@ export const PublicStorefrontPage: React.FC = () => {
     () => normalizeTableParam(searchParams.get('table') || ''),
     [searchParams]
   );
-  const { user } = useAuth();
+  const { user, signInWithGoogle, signOutUser, authError } = useAuth();
 
   const [shop, setShop] = useState<ShopSlugRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,15 +164,27 @@ export const PublicStorefrontPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [hydratedShopId, setHydratedShopId] = useState<string | null>(null);
 
+  // Per-Restaurant Customer Account & Rewards State
+  const [customerProfile, setCustomerProfile] = useState<ShopCustomer | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerOrders, setCustomerOrders] = useState<Order[]>([]);
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  const [registerOnOrder, setRegisterOnOrder] = useState(true);
+
   // Guest Order Cart & Payment
   const [cart, setCart] = useState<Record<string, number>>({});
   const [trayOpen, setTrayOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [tableOrRoom, setTableOrRoom] = useState(scannedTable);
   const [notes, setNotes] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [tableError, setTableError] = useState<string | null>(null);
   const [orderPaymentMethod, setOrderPaymentMethod] = useState<PaymentMethod>('cash');
   const [orderUtr, setOrderUtr] = useState('');
   const [draftOrderRef, setDraftOrderRef] = useState<string>(() => generateDraftReference('ORD'));
+  const [confirmingOrderStep, setConfirmingOrderStep] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -163,6 +194,11 @@ export const PublicStorefrontPage: React.FC = () => {
   const [liveTracker, setLiveTracker] = useState<OrderTracker | null>(null);
   const [matchedSavedTracker, setMatchedSavedTracker] = useState<OrderTracker | null>(null);
   const [trackerViewOpen, setTrackerViewOpen] = useState(false);
+
+  // Mistaken-Order Pending Self-Cancel State
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // End-of-Meal Full-Bill Settlement State (triggered when customer clicks "Pay Now")
   const [payNowOpen, setPayNowOpen] = useState(false);
@@ -179,6 +215,8 @@ export const PublicStorefrontPage: React.FC = () => {
   const [bookingRoom, setBookingRoom] = useState<Room | null>(null);
   const [bookingGuestName, setBookingGuestName] = useState('');
   const [bookingGuestPhone, setBookingGuestPhone] = useState('');
+  const [bookingNameError, setBookingNameError] = useState<string | null>(null);
+  const [bookingPhoneError, setBookingPhoneError] = useState<string | null>(null);
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingPaymentMethod, setBookingPaymentMethod] = useState<PaymentMethod>('cash');
   const [bookingUtr, setBookingUtr] = useState('');
@@ -283,6 +321,7 @@ export const PublicStorefrontPage: React.FC = () => {
             savedSessions[0]?.customerName ||
             '';
           setGuestName(resolvedGuestName);
+          setGuestPhone(savedState?.guestPhone || '');
 
           // Resolve active order ID & cached tracker snapshot for instant reload recovery
           const savedOrderBelongsToDifferentScannedTable = Boolean(
@@ -374,12 +413,66 @@ export const PublicStorefrontPage: React.FC = () => {
     };
   }, [shop?.shop_id, shop?.is_active, shop?.modules.menu, shop?.modules.rooms]);
 
+  // Subscribe to Per-Restaurant Customer Profile & Personal Order History when signed in
+  useEffect(() => {
+    if (!shop?.shop_id || !user?.uid || !user.emailVerified) {
+      setCustomerProfile(null);
+      setCustomerOrders([]);
+      setCustomerLoading(false);
+      return;
+    }
+
+    setCustomerLoading(true);
+    const unsubProfile = subscribeShopCustomer(
+      shop.shop_id,
+      user.uid,
+      (profileDoc) => {
+        setCustomerProfile(profileDoc);
+        setCustomerLoading(false);
+        if (profileDoc) {
+          setGuestName(profileDoc.full_name);
+          setGuestPhone(formatIndianMobile(profileDoc.mobile_number));
+          setNameError(null);
+          setPhoneError(null);
+        }
+      },
+      () => setCustomerLoading(false)
+    );
+
+    const unsubOrders = subscribeCustomerOrders(shop.shop_id, user.uid, (ordersList) => {
+      setCustomerOrders(ordersList);
+    });
+
+    return () => {
+      unsubProfile();
+      unsubOrders();
+    };
+  }, [shop?.shop_id, user?.uid, user?.emailVerified]);
+
+  // Auto-recover an active unpaid member order across devices if no local active order is set
+  useEffect(() => {
+    if (!shop?.shop_id || hydratedShopId !== shop.shop_id || activeOrderId) return;
+    const openOrders = customerOrders.filter(
+      (o) => o.status !== 'paid' && o.status !== 'cancelled'
+    );
+    if (openOrders.length === 0) return;
+    const matched = scannedTable
+      ? openOrders.find(
+          (o) => normalizeMatchKey(o.table_or_room) === normalizeMatchKey(scannedTable)
+        )
+      : openOrders[0];
+    if (matched) {
+      setActiveOrderId(matched.id);
+    }
+  }, [shop?.shop_id, hydratedShopId, activeOrderId, customerOrders, scannedTable]);
+
   // Persist customer cart, table context, and active order state after initial hydration
   useEffect(() => {
     if (!shop?.shop_id || hydratedShopId !== shop.shop_id) return;
     writeStorefrontState(shop.shop_id, {
       cart,
       guestName,
+      guestPhone,
       tableOrRoom,
       notes,
       orderPaymentMethod,
@@ -398,6 +491,7 @@ export const PublicStorefrontPage: React.FC = () => {
     hydratedShopId,
     cart,
     guestName,
+    guestPhone,
     tableOrRoom,
     notes,
     orderPaymentMethod,
@@ -425,6 +519,7 @@ export const PublicStorefrontPage: React.FC = () => {
         if (!synced) return;
         setCart(synced.cart);
         setGuestName(synced.guestName);
+        setGuestPhone(synced.guestPhone || '');
         if (!scannedTable && synced.tableOrRoom) {
           setTableOrRoom(synced.tableOrRoom);
         }
@@ -532,6 +627,7 @@ export const PublicStorefrontPage: React.FC = () => {
       tableKey &&
       liveTracker &&
       liveTracker.status !== 'paid' &&
+      liveTracker.status !== 'cancelled' &&
       normalizeMatchKey(liveTracker.table_or_room) === tableKey
     ) {
       return liveTracker;
@@ -543,7 +639,7 @@ export const PublicStorefrontPage: React.FC = () => {
         : matchedSavedTracker && matchedSavedTracker.id === matchingSession.orderId
           ? matchedSavedTracker
           : null;
-    if (!candidate || candidate.status === 'paid') return null;
+    if (!candidate || candidate.status === 'paid' || candidate.status === 'cancelled') return null;
     return candidate;
   }, [tableOrRoom, matchingSession, liveTracker, matchedSavedTracker]);
 
@@ -674,12 +770,47 @@ export const PublicStorefrontPage: React.FC = () => {
     });
   };
 
+  const handleSelectOrderToTrack = (ord: Order) => {
+    setActiveOrderId(ord.id);
+    setLiveTracker({
+      id: ord.id,
+      shop_id: ord.shop_id,
+      order_number: ord.order_number,
+      table_or_room: ord.table_or_room,
+      items: ord.items,
+      total_amount: ord.total_amount,
+      status: ord.status,
+      payment_method: ord.payment_method,
+      payment_status: ord.payment_status,
+      paid_at: ord.paid_at ?? null,
+      created_at: ord.created_at,
+      updated_at: ord.updated_at,
+    });
+    setPayNowOpen(false);
+    setConfirmCancelOpen(false);
+    setCancelError(null);
+    setTrackerViewOpen(true);
+  };
+
   const openOrderTray = () => {
     setSubmitError(null);
+    setNameError(null);
+    setPhoneError(null);
+    setTableError(null);
+    setConfirmingOrderStep(false);
     setDraftOrderRef(generateDraftReference('ORD'));
     setOrderUtr('');
-    if (liveTracker && liveTracker.status !== 'paid' && activeSession) {
-      if (!guestName.trim()) {
+    if (customerProfile) {
+      setGuestName(customerProfile.full_name);
+      setGuestPhone(formatIndianMobile(customerProfile.mobile_number));
+    }
+    if (
+      liveTracker &&
+      liveTracker.status !== 'paid' &&
+      liveTracker.status !== 'cancelled' &&
+      activeSession
+    ) {
+      if (!customerProfile && !guestName.trim()) {
         setGuestName(activeSession.customerName);
       }
       if (!tableOrRoom.trim()) {
@@ -694,22 +825,93 @@ export const PublicStorefrontPage: React.FC = () => {
     setTrayOpen(true);
   };
 
-  const handlePlaceOrder = async (e: React.FormEvent) => {
+  const handleOrderTraySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop || cartItems.length === 0) return;
     setSubmitError(null);
+
+    const rawName = customerProfile ? customerProfile.full_name : guestName;
+    const rawPhone = customerProfile ? customerProfile.mobile_number : guestPhone;
+
+    const nameCheck = validateCustomerName(rawName);
+    const mobileCheck = validateIndianMobile(rawPhone);
+    const tableCheck = validateTableOrRoom(tableOrRoom);
+
+    setNameError(nameCheck.valid ? null : nameCheck.error || 'Please enter your real full name.');
+    setPhoneError(
+      mobileCheck.valid ? null : mobileCheck.error || 'Please enter a valid Indian mobile number.'
+    );
+    setTableError(
+      tableCheck.valid ? null : tableCheck.error || 'Please enter a valid table or room number.'
+    );
+
+    if (!nameCheck.valid || !mobileCheck.valid || !tableCheck.valid) {
+      setSubmitError('Please fix the highlighted details before continuing.');
+      return;
+    }
+
+    if (!customerProfile) {
+      setGuestName(nameCheck.value);
+      setGuestPhone(formatIndianMobile(mobileCheck.value));
+    }
+    setTableOrRoom(tableCheck.value);
+
+    if (!confirmingOrderStep) {
+      setConfirmingOrderStep(true);
+      return;
+    }
+    void handleConfirmPlaceOrder();
+  };
+
+  const handleConfirmPlaceOrder = async () => {
+    if (!shop || cartItems.length === 0) return;
+    setSubmitError(null);
+
+    const rawName = customerProfile ? customerProfile.full_name : guestName;
+    const rawPhone = customerProfile ? customerProfile.mobile_number : guestPhone;
+    const nameCheck = validateCustomerName(rawName);
+    const mobileCheck = validateIndianMobile(rawPhone);
+    const tableCheck = validateTableOrRoom(tableOrRoom);
+
+    if (!nameCheck.valid || !mobileCheck.valid || !tableCheck.valid) {
+      setNameError(nameCheck.valid ? null : nameCheck.error || 'Please enter your real full name.');
+      setPhoneError(
+        mobileCheck.valid ? null : mobileCheck.error || 'Please enter a valid Indian mobile number.'
+      );
+      setTableError(
+        tableCheck.valid ? null : tableCheck.error || 'Please enter a valid table or room number.'
+      );
+      setConfirmingOrderStep(false);
+      setSubmitError('Please provide valid name, mobile number, and table/room details.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      // Food orders accumulate on one open tab; full-bill Cash/UPI payment unlocks once served.
+      // Auto-register signed-in Google customer for this restaurant if opted in
+      if (user && user.emailVerified && user.email && !customerProfile && registerOnOrder) {
+        try {
+          await registerShopCustomer(shop.shop_id, {
+            uid: user.uid,
+            email: user.email,
+            full_name: nameCheck.value,
+            mobile_number: mobileCheck.value,
+          });
+        } catch {
+          // Do not block order placement if profile already exists
+        }
+      }
+
+      // Food orders accumulate on one open tab; full-bill Cash/UPI payment unlocks when ready to leave.
       if (combiningTracker) {
         const freshTracker =
           (await getOrderTracker(shop.shop_id, combiningTracker.id)) || combiningTracker;
 
-        if (freshTracker.status !== 'paid') {
+        if (freshTracker.status !== 'paid' && freshTracker.status !== 'cancelled') {
           const baseSession: GuestOrderSession = matchingSession || {
             orderId: freshTracker.id,
             orderNumber: freshTracker.order_number,
-            customerName: guestName.trim() || 'Guest',
+            customerName: nameCheck.value,
             tableOrRoom: freshTracker.table_or_room,
             notes: '',
             utrNumber: null,
@@ -752,6 +954,9 @@ export const PublicStorefrontPage: React.FC = () => {
           setCart({});
           setNotes('');
           setOrderUtr('');
+          setConfirmingOrderStep(false);
+          setConfirmCancelOpen(false);
+          setCancelError(null);
           setPayNowOpen(false);
           setSettlementError(null);
           setEditingSettlement(false);
@@ -765,8 +970,9 @@ export const PublicStorefrontPage: React.FC = () => {
 
       const created = await createShopOrder(shop.shop_id, {
         order_number: draftOrderRef,
-        customer_name: guestName,
-        table_or_room: tableOrRoom,
+        customer_name: nameCheck.value,
+        customer_phone: mobileCheck.value,
+        table_or_room: tableCheck.value,
         items: cartItems,
         notes,
         source: 'guest',
@@ -810,9 +1016,13 @@ export const PublicStorefrontPage: React.FC = () => {
 
       setCart({});
       setGuestName(created.customer_name);
+      setGuestPhone(formatIndianMobile(created.customer_phone));
       setTableOrRoom(scannedTable || created.table_or_room);
       setNotes('');
       setOrderUtr('');
+      setConfirmingOrderStep(false);
+      setConfirmCancelOpen(false);
+      setCancelError(null);
       setPayNowOpen(false);
       setSettlementError(null);
       setEditingSettlement(false);
@@ -824,6 +1034,35 @@ export const PublicStorefrontPage: React.FC = () => {
       setSubmitError(err instanceof Error ? err.message : 'Unable to submit your order.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGuestCancelPendingOrder = async () => {
+    if (!shop || !liveTracker) return;
+    if (
+      liveTracker.status !== 'pending' ||
+      getEffectivePaymentStatus(liveTracker.payment_status, liveTracker.status) !== 'unpaid'
+    ) {
+      setCancelError('The kitchen has already started preparing your order. Please ask staff.');
+      return;
+    }
+    setCancelError(null);
+    setCancellingOrder(true);
+    try {
+      await cancelOrder(shop.shop_id, liveTracker.id);
+      setConfirmCancelOpen(false);
+      setPayNowOpen(false);
+      const remaining = guestSessions.filter((s) => s.orderId !== liveTracker.id);
+      setGuestSessions(remaining);
+      writeGuestSessions(shop.shop_id, remaining);
+    } catch (err) {
+      setCancelError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to cancel now — kitchen may have already started preparing.'
+      );
+    } finally {
+      setCancellingOrder(false);
     }
   };
 
@@ -864,9 +1103,11 @@ export const PublicStorefrontPage: React.FC = () => {
   const handlePlaceAnotherOrder = () => {
     setPayNowOpen(false);
     setEditingSettlement(false);
+    setConfirmCancelOpen(false);
+    setCancelError(null);
     setTrackerViewOpen(false);
     setActiveSection('menu');
-    if (liveTracker?.status === 'paid' && shop) {
+    if ((liveTracker?.status === 'paid' || liveTracker?.status === 'cancelled') && shop) {
       const remaining = guestSessions.filter((s) => s.orderId !== liveTracker.id);
       setGuestSessions(remaining);
       writeGuestSessions(shop.shop_id, remaining);
@@ -883,7 +1124,13 @@ export const PublicStorefrontPage: React.FC = () => {
     setBookingRoom(room);
     setConfirmedBooking(null);
     setBookingError(null);
+    setBookingNameError(null);
+    setBookingPhoneError(null);
     setBookingUtr('');
+    if (customerProfile) {
+      setBookingGuestName(customerProfile.full_name);
+      setBookingGuestPhone(formatIndianMobile(customerProfile.mobile_number));
+    }
     setDraftBookingRef(generateDraftReference('BK'));
     setBookingPaymentMethod(cashEnabled ? 'cash' : upiEnabled ? 'upi' : 'cash');
   };
@@ -892,6 +1139,21 @@ export const PublicStorefrontPage: React.FC = () => {
     e.preventDefault();
     if (!shop || !bookingRoom) return;
     setBookingError(null);
+
+    const nameCheck = validateCustomerName(bookingGuestName);
+    const mobileCheck = validateIndianMobile(bookingGuestPhone);
+    setBookingNameError(
+      nameCheck.valid ? null : nameCheck.error || 'Please enter your real full name.'
+    );
+    setBookingPhoneError(
+      mobileCheck.valid
+        ? null
+        : mobileCheck.error || 'Please enter a valid 10-digit Indian mobile number.'
+    );
+    if (!nameCheck.valid || !mobileCheck.valid) {
+      setBookingError('Please provide your real full name and a valid Indian mobile number.');
+      return;
+    }
 
     const nights = diffNights(checkInDate, checkOutDate);
     if (nights <= 0) {
@@ -917,8 +1179,8 @@ export const PublicStorefrontPage: React.FC = () => {
       const created = await createRoomBooking(shop.shop_id, {
         room_id: bookingRoom.id,
         room_number: bookingRoom.room_number,
-        guest_name: bookingGuestName,
-        guest_contact: bookingGuestPhone,
+        guest_name: nameCheck.value,
+        guest_contact: mobileCheck.value,
         check_in: checkInDate,
         check_out: checkOutDate,
         total_price: totalPrice,
@@ -929,8 +1191,10 @@ export const PublicStorefrontPage: React.FC = () => {
         utr_number: effectiveMethod === 'upi' ? bookingUtr.trim() || null : null,
       });
       setConfirmedBooking(created);
-      setBookingGuestName('');
-      setBookingGuestPhone('');
+      if (!customerProfile) {
+        setBookingGuestName('');
+        setBookingGuestPhone('');
+      }
       setBookingNotes('');
       setBookingUtr('');
     } catch (err) {
@@ -1066,55 +1330,107 @@ export const PublicStorefrontPage: React.FC = () => {
             </Link>
           </nav>
 
-          {canOrder ? (
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={openOrderTray}
-              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap shrink-0 cursor-pointer"
-              style={{ backgroundColor: accent }}
+              onClick={() => setAccountDrawerOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                customerProfile
+                  ? 'bg-slate-50 border-slate-300 text-slate-900 hover:bg-slate-100'
+                  : user && user.emailVerified
+                    ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100/70'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Order</span>
-              <span className="font-mono tabular-nums">({cartCount})</span>
+              {customerProfile ? (
+                <>
+                  <Award className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="max-w-[90px] truncate">
+                    {customerProfile.full_name.split(' ')[0]}
+                  </span>
+                  <span className="hidden sm:inline font-mono text-[11px] text-slate-500 tabular-nums">
+                    · {customerProfile.reward_points || 0} pts
+                  </span>
+                </>
+              ) : user && user.emailVerified ? (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Complete Signup</span>
+                  <span className="sm:hidden">Register</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">Member Login</span>
+                  <span className="sm:hidden">Login</span>
+                </>
+              )}
             </button>
-          ) : (
-            <Link
-              to="/login"
-              className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0"
-            >
-              Staff Login
-            </Link>
-          )}
+
+            {canOrder ? (
+              <button
+                type="button"
+                onClick={openOrderTray}
+                className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap shrink-0 cursor-pointer"
+                style={{ backgroundColor: accent }}
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Order</span>
+                <span className="font-mono tabular-nums">({cartCount})</span>
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0"
+              >
+                Staff Login
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Active Live Order Banner when browsing menu */}
-      {liveTracker && !trackerViewOpen && (
-        <div className="bg-slate-900 text-white">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="font-mono font-semibold shrink-0">{liveTracker.order_number}</span>
-              <span className="text-slate-300 truncate">
-                {liveTracker.table_or_room} · {formatCurrency(liveTracker.total_amount)} ·{' '}
-                <strong className="text-white">{activeStepMeta.label}</strong>
-              </span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setPayNowOpen(false);
-                  setTrackerViewOpen(true);
-                }}
-                className="inline-flex items-center gap-1 font-medium text-slate-200 hover:text-white whitespace-nowrap cursor-pointer"
-              >
-                Track Live
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-              {liveTracker.status !== 'paid' &&
-                getEffectivePaymentStatus(liveTracker.payment_status, liveTracker.status) !==
-                  'paid' && (
+      {liveTracker && !trackerViewOpen && liveTracker.status !== 'cancelled' && (() => {
+        const bannerPayStatus = getEffectivePaymentStatus(
+          liveTracker.payment_status,
+          liveTracker.status
+        );
+        const isUnpaidServed =
+          liveTracker.status === 'served' &&
+          bannerPayStatus !== 'paid' &&
+          bannerPayStatus !== 'verification_pending';
+
+        return (
+          <div className={isUnpaidServed ? 'bg-amber-950 text-amber-50' : 'bg-slate-900 text-white'}>
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full animate-pulse shrink-0 ${
+                    isUnpaidServed ? 'bg-amber-400' : 'bg-emerald-400'
+                  }`}
+                />
+                <span className="font-mono font-semibold shrink-0">{liveTracker.order_number}</span>
+                <span className={isUnpaidServed ? 'text-amber-100 truncate' : 'text-slate-300 truncate'}>
+                  {liveTracker.table_or_room} · {formatCurrency(liveTracker.total_amount)} ·{' '}
+                  <strong className="text-white">
+                    {isUnpaidServed ? 'Served · Please pay before leaving' : activeStepMeta.label}
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayNowOpen(false);
+                    setTrackerViewOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 font-medium text-slate-200 hover:text-white whitespace-nowrap cursor-pointer"
+                >
+                  Track Live
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                {liveTracker.status !== 'paid' && bannerPayStatus !== 'paid' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1124,15 +1440,16 @@ export const PublicStorefrontPage: React.FC = () => {
                       setTrackerViewOpen(true);
                     }}
                     className="px-3 py-1.5 text-xs font-semibold text-white rounded-md hover:opacity-95 whitespace-nowrap cursor-pointer"
-                    style={{ backgroundColor: accent }}
+                    style={{ backgroundColor: isUnpaidServed ? '#D97706' : accent }}
                   >
                     Pay Now
                   </button>
                 )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Storefront Intro & Dual-Module Mode Switch */}
       {!trackerViewOpen && (
@@ -1204,77 +1521,109 @@ export const PublicStorefrontPage: React.FC = () => {
                       <span className="font-mono text-sm font-semibold text-slate-900 tabular-nums">
                         {liveTracker.order_number}
                       </span>
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        Live tracker
-                      </span>
+                      {liveTracker.status === 'cancelled' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
+                          <Ban className="w-3.5 h-3.5" />
+                          Cancelled
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Live tracker
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
                       {shop.name} · {liveTracker.table_or_room}
                     </p>
                   </div>
-                  <span className="font-mono text-lg font-semibold text-slate-900 tabular-nums">
+                  <span
+                    className={`font-mono text-lg font-semibold tabular-nums ${
+                      liveTracker.status === 'cancelled'
+                        ? 'text-slate-400 line-through'
+                        : 'text-slate-900'
+                    }`}
+                  >
                     {formatCurrency(liveTracker.total_amount)}
                   </span>
                 </div>
 
-                <div className="mt-5 flex items-start gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white shrink-0"
-                    style={{ backgroundColor: accent }}
-                  >
-                    {liveTracker.status === 'paid' || liveTracker.status === 'served' ? (
-                      <CheckCircle2 className="w-5 h-5" />
-                    ) : liveTracker.status === 'preparing' ? (
-                      <ChefHat className="w-5 h-5" />
-                    ) : (
-                      <Clock className="w-5 h-5" />
-                    )}
+                {liveTracker.status === 'cancelled' ? (
+                  <div className="mt-5 flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                      <Ban className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="font-display text-lg font-bold text-slate-900">
+                        Order cancelled
+                      </h2>
+                      <p className="text-sm text-slate-600 mt-0.5">
+                        This order has been cancelled and removed from the kitchen queue. No
+                        payment is due.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-display text-lg font-bold text-slate-900">
-                      {activeStepMeta.headline}
-                    </h2>
-                    <p className="text-sm text-slate-600 mt-0.5">{activeStepMeta.detail}</p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="mt-5 flex items-start gap-3">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white shrink-0"
+                        style={{ backgroundColor: accent }}
+                      >
+                        {liveTracker.status === 'paid' || liveTracker.status === 'served' ? (
+                          <CheckCircle2 className="w-5 h-5" />
+                        ) : liveTracker.status === 'preparing' ? (
+                          <ChefHat className="w-5 h-5" />
+                        ) : (
+                          <Clock className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div>
+                        <h2 className="font-display text-lg font-bold text-slate-900">
+                          {activeStepMeta.headline}
+                        </h2>
+                        <p className="text-sm text-slate-600 mt-0.5">{activeStepMeta.detail}</p>
+                      </div>
+                    </div>
 
-                {/* Live 5-Step Progress Stepper */}
-                <div className="mt-6 pt-6 border-t border-slate-200">
-                  <ol className="grid grid-cols-5 gap-2">
-                    {TRACKER_STEPS.map((step, idx) => {
-                      const isDone = idx < activeStepIndex;
-                      const isCurrent = idx === activeStepIndex;
-                      return (
-                        <li key={step.status} className="flex flex-col items-center text-center">
-                          <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-semibold border transition-colors ${
-                              isDone
-                                ? 'bg-emerald-600 border-emerald-600 text-white'
-                                : isCurrent
-                                  ? 'text-white border-transparent'
-                                  : 'bg-slate-50 border-slate-300 text-slate-400'
-                            }`}
-                            style={isCurrent ? { backgroundColor: accent } : undefined}
-                          >
-                            {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-                          </div>
-                          <span
-                            className={`mt-2 text-[11px] sm:text-xs font-medium leading-tight ${
-                              isCurrent
-                                ? 'text-slate-900 font-semibold'
-                                : isDone
-                                  ? 'text-emerald-700'
-                                  : 'text-slate-400'
-                            }`}
-                          >
-                            {step.label}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
+                    {/* Live 5-Step Progress Stepper */}
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <ol className="grid grid-cols-5 gap-2">
+                        {TRACKER_STEPS.map((step, idx) => {
+                          const isDone = idx < activeStepIndex;
+                          const isCurrent = idx === activeStepIndex;
+                          return (
+                            <li key={step.status} className="flex flex-col items-center text-center">
+                              <div
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-semibold border transition-colors ${
+                                  isDone
+                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                    : isCurrent
+                                      ? 'text-white border-transparent'
+                                      : 'bg-slate-50 border-slate-300 text-slate-400'
+                                }`}
+                                style={isCurrent ? { backgroundColor: accent } : undefined}
+                              >
+                                {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                              </div>
+                              <span
+                                className={`mt-2 text-[11px] sm:text-xs font-medium leading-tight ${
+                                  isCurrent
+                                    ? 'text-slate-900 font-semibold'
+                                    : isDone
+                                      ? 'text-emerald-700'
+                                      : 'text-slate-400'
+                                }`}
+                              >
+                                {step.label}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Itemized Receipt */}
@@ -1311,6 +1660,14 @@ export const PublicStorefrontPage: React.FC = () => {
                 </div>
 
                 {(() => {
+                  if (liveTracker.status === 'cancelled') {
+                    return (
+                      <div className="pt-3 border-t border-slate-200 text-xs text-slate-500">
+                        This order was cancelled. No charge applies.
+                      </div>
+                    );
+                  }
+
                   const pMethod = getEffectivePaymentMethod(liveTracker.payment_method);
                   const pStatus = getEffectivePaymentStatus(
                     liveTracker.payment_status,
@@ -1322,7 +1679,7 @@ export const PublicStorefrontPage: React.FC = () => {
                       <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3 text-xs">
                         <span className="text-slate-500">Payment</span>
                         <span className="font-semibold text-emerald-700">
-                          Confirmed · Paid via {pMethod === 'upi' ? 'UPI' : 'Cash'}
+                          Confirmed by Owner · Paid via {pMethod === 'upi' ? 'UPI' : 'Cash'}
                         </span>
                       </div>
                     );
@@ -1337,18 +1694,19 @@ export const PublicStorefrontPage: React.FC = () => {
                         <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 space-y-2.5 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-semibold text-amber-950">
-                              UPI Payment Submitted · Awaiting Staff Verification
+                              UPI Payment Submitted · Awaiting Owner Verification
                             </span>
                             <span className="font-mono font-semibold text-amber-900 tabular-nums">
                               {formatCurrency(liveTracker.total_amount)}
                             </span>
                           </div>
                           <p className="text-amber-900/80 leading-relaxed">
-                            Our staff has been notified to verify your UPI transfer
+                            The shop owner has been notified to verify your UPI transfer
                             {activeSession?.utrNumber
                               ? ` (UTR: ${activeSession.utrNumber})`
                               : ''}
-                            . Your receipt will automatically update to Paid once confirmed.
+                            . Please show this screen at the counter if needed — your receipt will
+                            automatically update to Paid once confirmed.
                           </p>
                           <button
                             type="button"
@@ -1368,23 +1726,45 @@ export const PublicStorefrontPage: React.FC = () => {
                   }
 
                   if (!payNowOpen) {
+                    const isServedUnpaid = liveTracker.status === 'served';
                     return (
-                      <div className="pt-3 border-t border-slate-200 space-y-1.5 text-xs">
+                      <div className="pt-3 border-t border-slate-200 space-y-2.5 text-xs">
+                        {isServedUnpaid && (
+                          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-amber-950">
+                            <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="font-semibold">
+                                Your meal is served · Please pay before leaving
+                              </p>
+                              <p className="text-[11px] text-amber-900/80 mt-0.5">
+                                Tap <strong>Pay Now</strong> below to settle your full bill via{' '}
+                                {cashEnabled && upiEnabled
+                                  ? 'Cash or UPI'
+                                  : upiEnabled
+                                    ? 'UPI'
+                                    : 'Cash'}
+                                .
+                              </p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-slate-500">Payment Status</span>
                           <span className="font-semibold text-slate-800">Unpaid · Open Bill</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          Keep ordering as much as you like — all items stay on this single unpaid
-                          bill. Tap <strong className="text-slate-700">Pay Now</strong> below when
-                          you are ready to leave to pay the full amount via{' '}
-                          {cashEnabled && upiEnabled
-                            ? 'Cash or UPI'
-                            : upiEnabled
-                              ? 'UPI'
-                              : 'Cash'}
-                          .
-                        </p>
+                        {!isServedUnpaid && (
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            Keep ordering as much as you like — all items stay on this single unpaid
+                            bill. Tap <strong className="text-slate-700">Pay Now</strong> below when
+                            you are ready to leave to pay the full amount via{' '}
+                            {cashEnabled && upiEnabled
+                              ? 'Cash or UPI'
+                              : upiEnabled
+                                ? 'UPI'
+                                : 'Cash'}
+                            .
+                          </p>
+                        )}
                       </div>
                     );
                   }
@@ -1535,52 +1915,115 @@ export const PublicStorefrontPage: React.FC = () => {
               </div>
 
               {(() => {
-                const isBillSettled =
-                  liveTracker.status === 'paid' ||
-                  getEffectivePaymentStatus(liveTracker.payment_status, liveTracker.status) ===
-                    'paid';
+                const isCancelled = liveTracker.status === 'cancelled';
+                const pStatus = getEffectivePaymentStatus(
+                  liveTracker.payment_status,
+                  liveTracker.status
+                );
+                const isBillSettled = liveTracker.status === 'paid' || pStatus === 'paid';
                 const isUpiPending =
                   getEffectivePaymentMethod(liveTracker.payment_method) === 'upi' &&
-                  getEffectivePaymentStatus(liveTracker.payment_status, liveTracker.status) ===
-                    'verification_pending';
-                const showPayNowButton = !isBillSettled && !isUpiPending && !payNowOpen;
+                  pStatus === 'verification_pending';
+                const canSelfCancel = liveTracker.status === 'pending' && pStatus === 'unpaid';
+                const showPayNowButton =
+                  !isCancelled && !isBillSettled && !isUpiPending && !payNowOpen;
 
                 return (
-                  <div className="p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <p className="text-xs text-slate-500">
-                      {isBillSettled
-                        ? 'Bill settled. Start a new order anytime.'
-                        : 'Want to order more? New items combine into this unpaid bill.'}
-                    </p>
-                    <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={handlePlaceAnotherOrder}
-                        className={`w-full sm:w-auto px-4 py-2.5 text-xs font-semibold rounded-lg whitespace-nowrap cursor-pointer ${
-                          showPayNowButton
-                            ? 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50'
-                            : 'text-white hover:opacity-95'
-                        }`}
-                        style={showPayNowButton ? undefined : { backgroundColor: accent }}
-                      >
-                        {isBillSettled ? 'Place Another Order' : 'Add More Items'}
-                      </button>
+                  <div className="border-t border-slate-200 bg-white">
+                    {canSelfCancel && (
+                      <div className="px-5 pt-4 pb-1">
+                        {cancelError && (
+                          <div className="mb-2.5 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                            {cancelError}
+                          </div>
+                        )}
+                        {confirmCancelOpen ? (
+                          <div className="p-3 rounded-lg bg-red-50 border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                            <span className="font-medium text-red-900">
+                              Ordered by mistake? Cancel {liveTracker.order_number} before the
+                              kitchen starts cooking.
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                disabled={cancellingOrder}
+                                onClick={() => void handleGuestCancelPendingOrder()}
+                                className="px-3 py-1.5 font-semibold text-white bg-red-700 hover:bg-red-800 disabled:opacity-60 rounded-md whitespace-nowrap cursor-pointer"
+                              >
+                                {cancellingOrder ? 'Cancelling...' : 'Yes, Cancel Order'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmCancelOpen(false);
+                                  setCancelError(null);
+                                }}
+                                className="px-3 py-1.5 font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer"
+                              >
+                                Keep
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                            <span>Ordered by mistake? You can cancel while still Pending.</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCancelError(null);
+                                setConfirmCancelOpen(true);
+                              }}
+                              className="font-semibold text-red-700 hover:underline whitespace-nowrap cursor-pointer"
+                            >
+                              Cancel Order
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                      {showPayNowButton && (
+                    <div className="p-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <p className="text-xs text-slate-500">
+                        {isCancelled
+                          ? 'Ready to order again? Browse the menu anytime.'
+                          : isBillSettled
+                            ? 'Bill settled. Start a new order anytime.'
+                            : 'Want to order more? New items combine into this unpaid bill.'}
+                      </p>
+                      <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5 shrink-0">
                         <button
                           type="button"
-                          onClick={() => {
-                            setSettlementError(null);
-                            setCashConfirmedNotice(false);
-                            setEditingSettlement(false);
-                            setPayNowOpen(true);
-                          }}
-                          className="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap cursor-pointer"
-                          style={{ backgroundColor: accent }}
+                          onClick={handlePlaceAnotherOrder}
+                          className={`w-full sm:w-auto px-4 py-2.5 text-xs font-semibold rounded-lg whitespace-nowrap cursor-pointer ${
+                            showPayNowButton
+                              ? 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50'
+                              : 'text-white hover:opacity-95'
+                          }`}
+                          style={showPayNowButton ? undefined : { backgroundColor: accent }}
                         >
-                          Pay Now · {formatCurrency(liveTracker.total_amount)}
+                          {isCancelled
+                            ? 'Start Fresh Order'
+                            : isBillSettled
+                              ? 'Place Another Order'
+                              : 'Add More Items'}
                         </button>
-                      )}
+
+                        {showPayNowButton && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettlementError(null);
+                              setCashConfirmedNotice(false);
+                              setEditingSettlement(false);
+                              setPayNowOpen(true);
+                            }}
+                            className="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap cursor-pointer"
+                            style={{ backgroundColor: accent }}
+                          >
+                            Pay Now · {formatCurrency(liveTracker.total_amount)}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1927,8 +2370,10 @@ export const PublicStorefrontPage: React.FC = () => {
           <div className="relative z-10 w-full max-w-md bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <h2 className="font-display text-base font-semibold text-slate-900">Your Order</h2>
-                {cartItems.length > 0 && (
+                <h2 className="font-display text-base font-semibold text-slate-900">
+                  {confirmingOrderStep ? 'Review & Confirm Order' : 'Your Order'}
+                </h2>
+                {cartItems.length > 0 && !confirmingOrderStep && (
                   <button
                     type="button"
                     onClick={() => setCart({})}
@@ -1940,7 +2385,10 @@ export const PublicStorefrontPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setTrayOpen(false)}
+                onClick={() => {
+                  setConfirmingOrderStep(false);
+                  setTrayOpen(false);
+                }}
                 className="p-1.5 text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1954,7 +2402,7 @@ export const PublicStorefrontPage: React.FC = () => {
                 <p className="text-xs text-slate-500 mt-1">
                   Add items from the menu to place a live order directly to the kitchen.
                 </p>
-                {liveTracker && (
+                {liveTracker && liveTracker.status !== 'cancelled' && (
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
                     <button
                       type="button"
@@ -1990,7 +2438,7 @@ export const PublicStorefrontPage: React.FC = () => {
               </div>
             ) : (
               <form
-                onSubmit={(e) => void handlePlaceOrder(e)}
+                onSubmit={handleOrderTraySubmit}
                 className="flex-1 overflow-y-auto p-6 space-y-5"
               >
                 {submitError && (
@@ -1999,165 +2447,397 @@ export const PublicStorefrontPage: React.FC = () => {
                   </div>
                 )}
 
-                {combiningTracker && (
-                  <div className="p-3.5 rounded-lg bg-blue-50/80 border border-blue-200 space-y-2 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-blue-950">
-                        Adding to Active Order {combiningTracker.order_number}
-                      </span>
-                      <span className="font-mono font-semibold text-blue-800 tabular-nums">
-                        {combiningTracker.table_or_room}
-                      </span>
-                    </div>
-                    <p className="text-blue-900/80 leading-relaxed">
-                      These items will merge into your single running table bill — pay everything at
-                      once after your meal is served.
-                    </p>
-                    <div className="pt-1.5 border-t border-blue-200/80 space-y-1 font-mono tabular-nums">
-                      <div className="flex items-center justify-between text-blue-900">
-                        <span>
-                          Previous bill (
-                          {combiningTracker.items.reduce((s, i) => s + i.quantity, 0)} items)
-                        </span>
-                        <span>{formatCurrency(combiningTracker.total_amount)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-blue-900">
-                        <span>Adding now ({cartCount} items)</span>
-                        <span>+{formatCurrency(cartTotal)}</span>
-                      </div>
-                      <div className="flex items-center justify-between font-bold text-slate-900 pt-1 border-t border-blue-200/80">
-                        <span>Combined Running Total</span>
-                        <span>{formatCurrency(combiningTracker.total_amount + cartTotal)}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
-                  {cartItems.map((item) => (
-                    <li
-                      key={item.menu_item_id}
-                      className="px-3.5 py-3 flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{item.name}</p>
-                        <p className="text-xs font-mono text-slate-500 tabular-nums">
-                          {formatCurrency(item.price)} each
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(item.menu_item_id, -1)}
-                          className="w-7 h-7 rounded border border-slate-300 flex items-center justify-center text-slate-700 cursor-pointer"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="font-mono text-xs font-semibold w-5 text-center tabular-nums">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(item.menu_item_id, 1)}
-                          className="w-7 h-7 rounded border border-slate-300 flex items-center justify-center text-slate-700 cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="space-y-3.5">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Your Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={100}
-                      value={guestName}
-                      onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="Aarav Sharma"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Table or Room Number
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={60}
-                      value={tableOrRoom}
-                      onChange={(e) => setTableOrRoom(e.target.value)}
-                      placeholder="Table 4 or Room 201"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Special Instructions (Optional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      maxLength={300}
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Less sugar, extra chutney, allergies..."
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none resize-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Deferred End-of-Meal Billing Notice */}
-                {(() => {
-                  const combinedBillTotal = combiningTracker
-                    ? combiningTracker.total_amount + cartTotal
-                    : cartTotal;
-
-                  return (
-                    <>
-                      <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
-                        <span className="font-semibold text-slate-800">Pay when ready to leave: </span>
-                        Orders stay unpaid while you dine. Add as many rounds as you like, then tap{' '}
-                        <strong className="text-slate-800">Pay Now</strong> to settle your full
-                        combined bill via{' '}
-                        {cashEnabled && upiEnabled
-                          ? 'Cash or UPI'
-                          : upiEnabled
-                            ? 'UPI'
-                            : 'Cash'}
-                        .
-                      </div>
-
-                      <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs text-slate-500">
-                            {combiningTracker ? 'Combined Running Bill' : 'Order Total'}
-                          </p>
-                          <p className="font-mono text-lg font-semibold text-slate-900 tabular-nums">
-                            {formatCurrency(combinedBillTotal)}
-                          </p>
+                {confirmingOrderStep ? (
+                  /* 2-Step Confirmation Gate: Prevents accidental kitchen tickets */
+                  (() => {
+                    const combinedBillTotal = combiningTracker
+                      ? combiningTracker.total_amount + cartTotal
+                      : cartTotal;
+                    return (
+                      <div className="space-y-5">
+                        <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-950">
+                          <ShieldCheck className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="font-semibold">
+                              Double-check before sending to the kitchen
+                            </p>
+                            <p className="text-amber-900/80 mt-0.5 leading-relaxed">
+                              You can cancel while your order is Pending, but once the kitchen
+                              starts preparing it, cancellation is locked.
+                            </p>
+                          </div>
                         </div>
-                        <button
-                          type="submit"
-                          disabled={submitting}
-                          className="px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 whitespace-nowrap cursor-pointer"
-                          style={{ backgroundColor: accent }}
-                        >
-                          {submitting
-                            ? 'Sending...'
-                            : combiningTracker
-                              ? `Add to ${combiningTracker.order_number}`
-                              : 'Place Live Order'}
-                        </button>
+
+                        <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-slate-500">Customer</span>
+                            <span className="font-semibold text-slate-900">
+                              {(customerProfile ? customerProfile.full_name : guestName).trim()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-slate-500">Verified Mobile</span>
+                            <span className="font-mono text-slate-900 tabular-nums">
+                              {formatIndianMobile(
+                                customerProfile ? customerProfile.mobile_number : guestPhone
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-slate-500">Table / Room</span>
+                            <span className="font-mono font-semibold text-slate-900">
+                              {tableOrRoom.trim()}
+                            </span>
+                          </div>
+                          {combiningTracker && (
+                            <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200">
+                              <span className="text-slate-500">Merging into</span>
+                              <span className="font-mono font-semibold text-blue-800">
+                                {combiningTracker.order_number}
+                              </span>
+                            </div>
+                          )}
+                          {notes.trim() && (
+                            <div className="pt-1.5 border-t border-slate-200">
+                              <span className="text-slate-500">Notes: </span>
+                              <span className="text-slate-800">{notes.trim()}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-700">
+                            Items Sending Now ({cartCount})
+                          </p>
+                          <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
+                            {cartItems.map((item) => (
+                              <li
+                                key={item.menu_item_id}
+                                className="px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs"
+                              >
+                                <span className="text-slate-800">
+                                  <span className="font-mono font-semibold text-slate-900 mr-1.5 tabular-nums">
+                                    {item.quantity}×
+                                  </span>
+                                  {item.name}
+                                </span>
+                                <span className="font-mono font-medium text-slate-900 tabular-nums">
+                                  {formatCurrency(item.price * item.quantity)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-600">
+                              {combiningTracker ? 'New Combined Running Bill' : 'Total Order Bill'}
+                            </span>
+                            <span className="font-mono text-lg font-bold text-slate-900 tabular-nums">
+                              {formatCurrency(combinedBillTotal)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => setConfirmingOrderStep(false)}
+                              className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-60 cursor-pointer"
+                            >
+                              Edit Items
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={submitting}
+                              className="flex-1 px-4 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 cursor-pointer"
+                              style={{ backgroundColor: accent }}
+                            >
+                              {submitting
+                                ? 'Sending to Kitchen...'
+                                : combiningTracker
+                                  ? `Confirm & Add to ${combiningTracker.order_number}`
+                                  : 'Confirm & Send to Kitchen'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </>
-                  );
-                })()}
+                    );
+                  })()
+                ) : (
+                  <>
+                    {combiningTracker && (
+                      <div className="p-3.5 rounded-lg bg-blue-50/80 border border-blue-200 space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-blue-950">
+                            Adding to Active Order {combiningTracker.order_number}
+                          </span>
+                          <span className="font-mono font-semibold text-blue-800 tabular-nums">
+                            {combiningTracker.table_or_room}
+                          </span>
+                        </div>
+                        <p className="text-blue-900/80 leading-relaxed">
+                          These items will merge into your single running table bill — pay
+                          everything at once after your meal is served.
+                        </p>
+                        <div className="pt-1.5 border-t border-blue-200/80 space-y-1 font-mono tabular-nums">
+                          <div className="flex items-center justify-between text-blue-900">
+                            <span>
+                              Previous bill (
+                              {combiningTracker.items.reduce((s, i) => s + i.quantity, 0)} items)
+                            </span>
+                            <span>{formatCurrency(combiningTracker.total_amount)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-blue-900">
+                            <span>Adding now ({cartCount} items)</span>
+                            <span>+{formatCurrency(cartTotal)}</span>
+                          </div>
+                          <div className="flex items-center justify-between font-bold text-slate-900 pt-1 border-t border-blue-200/80">
+                            <span>Combined Running Total</span>
+                            <span>{formatCurrency(combiningTracker.total_amount + cartTotal)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
+                      {cartItems.map((item) => (
+                        <li
+                          key={item.menu_item_id}
+                          className="px-3.5 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">
+                              {item.name}
+                            </p>
+                            <p className="text-xs font-mono text-slate-500 tabular-nums">
+                              {formatCurrency(item.price)} each
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => updateCartQty(item.menu_item_id, -1)}
+                              className="w-7 h-7 rounded border border-slate-300 flex items-center justify-center text-slate-700 cursor-pointer"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="font-mono text-xs font-semibold w-5 text-center tabular-nums">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateCartQty(item.menu_item_id, 1)}
+                              className="w-7 h-7 rounded border border-slate-300 flex items-center justify-center text-slate-700 cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="space-y-3.5">
+                      {/* Member Status Banner / Verified Member Details */}
+                      {customerProfile ? (
+                        <div className="p-3.5 rounded-lg bg-emerald-50/70 border border-emerald-200 space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-semibold text-emerald-950">
+                              <Award className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>{customerProfile.full_name}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setAccountDrawerOpen(true)}
+                              className="text-xs font-medium text-emerald-800 hover:underline cursor-pointer"
+                            >
+                              Edit / Account
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-emerald-900/80 font-mono tabular-nums">
+                            <span>{formatIndianMobile(customerProfile.mobile_number)}</span>
+                            <span>{customerProfile.reward_points || 0} reward pts</span>
+                          </div>
+                        </div>
+                      ) : !user ? (
+                        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-800">
+                              Returning customer at {shop.name}?
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              Sign in to auto-fill details & earn reward points.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAccountDrawerOpen(true)}
+                            className="px-3 py-1.5 text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
+                          >
+                            Sign In / Register
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {!customerProfile && (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              Your Full Name <span className="text-red-600">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              maxLength={80}
+                              value={guestName}
+                              onChange={(e) => {
+                                setGuestName(e.target.value);
+                                if (nameError) setNameError(null);
+                              }}
+                              placeholder="Aarav Sharma"
+                              className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none ${
+                                nameError
+                                  ? 'border-red-400 focus:border-red-500 bg-red-50/30'
+                                  : 'border-slate-300 focus:border-blue-600'
+                              }`}
+                            />
+                            {nameError && (
+                              <p className="mt-1 text-[11px] text-red-600">{nameError}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              Mobile Number (India +91) <span className="text-red-600">*</span>
+                            </label>
+                            <input
+                              type="tel"
+                              required
+                              maxLength={20}
+                              value={guestPhone}
+                              onChange={(e) => {
+                                setGuestPhone(e.target.value);
+                                if (phoneError) setPhoneError(null);
+                              }}
+                              placeholder="+91 98201 44512"
+                              className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:outline-none ${
+                                phoneError
+                                  ? 'border-red-400 focus:border-red-500 bg-red-50/30'
+                                  : 'border-slate-300 focus:border-blue-600'
+                              }`}
+                            />
+                            {phoneError ? (
+                              <p className="mt-1 text-[11px] text-red-600">{phoneError}</p>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Required for bill confirmation (10-digit number starting with 6–9).
+                              </p>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Table or Room Number <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={60}
+                          value={tableOrRoom}
+                          onChange={(e) => {
+                            setTableOrRoom(e.target.value);
+                            if (tableError) setTableError(null);
+                          }}
+                          placeholder="Table 4 / Room 201"
+                          className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none ${
+                            tableError
+                              ? 'border-red-400 focus:border-red-500 bg-red-50/30'
+                              : 'border-slate-300 focus:border-blue-600'
+                          }`}
+                        />
+                        {tableError && (
+                          <p className="mt-1 text-[11px] text-red-600">{tableError}</p>
+                        )}
+                      </div>
+
+                      {user && user.emailVerified && !customerProfile && (
+                        <label className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={registerOnOrder}
+                            onChange={(e) => setRegisterOnOrder(e.target.checked)}
+                            className="mt-0.5 rounded border-slate-300"
+                          />
+                          <span className="text-xs text-slate-700 leading-relaxed">
+                            Save me as a registered <strong className="text-slate-900">{shop.name}</strong>{' '}
+                            member for 1-click repeat ordering & reward points.
+                          </span>
+                        </label>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Special Instructions (Optional)
+                        </label>
+                        <textarea
+                          rows={2}
+                          maxLength={300}
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Less sugar, extra chutney, allergies..."
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Deferred End-of-Meal Billing Notice */}
+                    {(() => {
+                      const combinedBillTotal = combiningTracker
+                        ? combiningTracker.total_amount + cartTotal
+                        : cartTotal;
+
+                      return (
+                        <>
+                          <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
+                            <span className="font-semibold text-slate-800">
+                              Pay when ready to leave:{' '}
+                            </span>
+                            Orders stay unpaid while you dine. Add as many rounds as you like, then
+                            tap <strong className="text-slate-800">Pay Now</strong> to settle your
+                            full combined bill via{' '}
+                            {cashEnabled && upiEnabled
+                              ? 'Cash or UPI'
+                              : upiEnabled
+                                ? 'UPI'
+                                : 'Cash'}
+                            .
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs text-slate-500">
+                                {combiningTracker ? 'Combined Running Bill' : 'Order Total'}
+                              </p>
+                              <p className="font-mono text-lg font-semibold text-slate-900 tabular-nums">
+                                {formatCurrency(combinedBillTotal)}
+                              </p>
+                            </div>
+                            <button
+                              type="submit"
+                              disabled={submitting}
+                              className="px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 whitespace-nowrap cursor-pointer"
+                              style={{ backgroundColor: accent }}
+                            >
+                              Review & Confirm
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
               </form>
             )}
           </div>
@@ -2296,31 +2976,55 @@ export const PublicStorefrontPage: React.FC = () => {
                 <div className="space-y-3.5">
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Full Name
+                      Full Name <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="text"
                       required
-                      maxLength={100}
+                      maxLength={80}
                       value={bookingGuestName}
-                      onChange={(e) => setBookingGuestName(e.target.value)}
+                      onChange={(e) => {
+                        setBookingGuestName(e.target.value);
+                        if (bookingNameError) setBookingNameError(null);
+                      }}
                       placeholder="Priya Nair"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none ${
+                        bookingNameError
+                          ? 'border-red-400 focus:border-red-500 bg-red-50/30'
+                          : 'border-slate-300 focus:border-blue-600'
+                      }`}
                     />
+                    {bookingNameError && (
+                      <p className="mt-1 text-[11px] text-red-600">{bookingNameError}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Phone Number
+                      Mobile Number (India +91) <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="tel"
                       required
-                      maxLength={120}
+                      maxLength={20}
                       value={bookingGuestPhone}
-                      onChange={(e) => setBookingGuestPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                      onChange={(e) => {
+                        setBookingGuestPhone(e.target.value);
+                        if (bookingPhoneError) setBookingPhoneError(null);
+                      }}
+                      placeholder="+91 98201 44512"
+                      className={`w-full px-3 py-2 text-sm font-mono border rounded-lg focus:outline-none ${
+                        bookingPhoneError
+                          ? 'border-red-400 focus:border-red-500 bg-red-50/30'
+                          : 'border-slate-300 focus:border-blue-600'
+                      }`}
                     />
+                    {bookingPhoneError ? (
+                      <p className="mt-1 text-[11px] text-red-600">{bookingPhoneError}</p>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -2417,6 +3121,22 @@ export const PublicStorefrontPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Per-Restaurant Member Account & Rewards Drawer */}
+      <CustomerAccountDrawer
+        open={accountDrawerOpen}
+        onClose={() => setAccountDrawerOpen(false)}
+        shop={shop}
+        user={user}
+        customer={customerProfile}
+        customerLoading={customerLoading}
+        customerOrders={customerOrders}
+        authError={authError}
+        onSignInWithGoogle={signInWithGoogle}
+        onSignOut={signOutUser}
+        onSelectOrderToTrack={handleSelectOrderToTrack}
+        accentColor={accent}
+      />
 
       <footer className="bg-white border-t border-slate-200 py-5 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
         {shop.name} · Powered by HostGrid

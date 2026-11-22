@@ -32,6 +32,7 @@ interface FrontDeskPanelProps {
   rooms: Room[];
   bookings: RoomBooking[];
   loading: boolean;
+  canSettlePayment?: boolean;
 }
 
 type DeskFilter = 'today' | 'pending' | 'in_house' | 'all';
@@ -63,6 +64,7 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
   rooms,
   bookings,
   loading,
+  canSettlePayment = false,
 }) => {
   const { pushToast } = useToast();
   const todayIso = useMemo(() => getTodayIso(), []);
@@ -435,7 +437,7 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      {canConfirmPaid && (
+                      {canConfirmPaid && canSettlePayment ? (
                         <button
                           type="button"
                           disabled={payBusy}
@@ -449,7 +451,11 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           {payBusy ? 'Confirming...' : 'Confirm Paid'}
                         </button>
-                      )}
+                      ) : canConfirmPaid && needsUpiVerify ? (
+                        <span className="text-[11px] font-medium text-amber-800 whitespace-nowrap">
+                          Owner confirmation required
+                        </span>
+                      ) : null}
 
                       {b.status === 'pending' && (
                         <>

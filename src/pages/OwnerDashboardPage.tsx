@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Award,
   BarChart3,
   BedDouble,
   ClipboardList,
   ExternalLink,
   QrCode,
   Settings,
+  ShieldCheck,
   Users,
   UtensilsCrossed,
   Wallet,
@@ -15,7 +17,9 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { NavItem, WorkspaceShell } from '../components/WorkspaceShell';
+import { PaymentVerificationSidebar } from '../components/PaymentVerificationSidebar';
 import { AnalyticsPanel } from '../components/owner/AnalyticsPanel';
+import { CustomersPanel } from '../components/owner/CustomersPanel';
 import { MenuManager } from '../components/owner/MenuManager';
 import { OrdersOwnerPanel } from '../components/owner/OrdersOwnerPanel';
 import { RoomsManager } from '../components/owner/RoomsManager';
@@ -27,15 +31,25 @@ import {
   subscribeMenuItems,
   subscribeRoomBookings,
   subscribeShopById,
+  subscribeShopCustomersList,
   subscribeShopOrders,
   subscribeShopRooms,
   subscribeShopStaff,
 } from '../lib/firestoreService';
 import { formatCurrency } from '../lib/validation';
 import { getEffectivePaymentMethod, getEffectivePaymentStatus } from '../lib/upi';
-import { MenuItem, Order, Room, RoomBooking, Shop, StaffInvite } from '../types';
+import { MenuItem, Order, Room, RoomBooking, Shop, ShopCustomer, StaffInvite } from '../types';
 
-type OwnerTab = 'analytics' | 'sales' | 'orders' | 'menu' | 'rooms' | 'qrcode' | 'staff' | 'settings';
+type OwnerTab =
+  | 'analytics'
+  | 'sales'
+  | 'orders'
+  | 'menu'
+  | 'rooms'
+  | 'customers'
+  | 'qrcode'
+  | 'staff'
+  | 'settings';
 
 const ALL_OWNER_TABS: readonly OwnerTab[] = [
   'analytics',
@@ -43,6 +57,7 @@ const ALL_OWNER_TABS: readonly OwnerTab[] = [
   'orders',
   'menu',
   'rooms',
+  'customers',
   'qrcode',
   'staff',
   'settings',
@@ -100,6 +115,15 @@ export const OwnerDashboardPage: React.FC = () => {
 
   const [staff, setStaff] = useState<StaffInvite[]>([]);
   const [staffLoading, setStaffLoading] = useState(true);
+  const [customers, setCustomers] = useState<ShopCustomer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [paymentSidebarOpen, setPaymentSidebarOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Subscribe to Shop config
   useEffect(() => {
@@ -252,12 +276,31 @@ export const OwnerDashboardPage: React.FC = () => {
     return () => unsub();
   }, [shop?.id, shop?.owner_email]);
 
+  // Subscribe to Registered Customers & Rewards roster
+  useEffect(() => {
+    if (!shop?.id) {
+      setCustomers([]);
+      setCustomersLoading(false);
+      return;
+    }
+    setCustomersLoading(true);
+    const unsub = subscribeShopCustomersList(shop.id, (list) => {
+      setCustomers(list);
+      setCustomersLoading(false);
+    });
+    return () => unsub();
+  }, [shop?.id]);
+
   // Dynamically hide disabled modules from sidebar & guard active tab
   const navItems: NavItem[] = useMemo(() => {
     if (!shop) return [];
     const pendingUpiCount =
-      orders.filter((o) => o.payment_method === 'upi' && o.payment_status === 'verification_pending')
-        .length +
+      orders.filter(
+        (o) =>
+          o.status !== 'cancelled' &&
+          o.payment_method === 'upi' &&
+          o.payment_status === 'verification_pending'
+      ).length +
       bookings.filter(
         (b) =>
           b.status !== 'cancelled' &&
@@ -275,7 +318,7 @@ export const OwnerDashboardPage: React.FC = () => {
       },
     ];
     if (shop.modules?.orders) {
-      const openCount = orders.filter((o) => o.status !== 'paid').length;
+      const openCount = orders.filter((o) => o.status !== 'paid' && o.status !== 'cancelled').length;
       items.push({ id: 'orders', label: 'Orders', icon: ClipboardList, count: openCount });
     }
     if (shop.modules?.menu) {
@@ -284,11 +327,28 @@ export const OwnerDashboardPage: React.FC = () => {
     if (shop.modules?.rooms) {
       items.push({ id: 'rooms', label: 'Rooms', icon: BedDouble, count: rooms.length });
     }
+    items.push({ id: 'customers', label: 'Customers', icon: Award, count: customers.length });
     items.push({ id: 'qrcode', label: 'Storefront QR', icon: QrCode });
     items.push({ id: 'staff', label: 'Staff Management', icon: Users, count: staff.length });
     items.push({ id: 'settings', label: 'Shop Settings', icon: Settings });
     return items;
-  }, [shop, orders, bookings, menuItems.length, rooms.length, staff.length]);
+  }, [shop, orders, bookings, menuItems.length, rooms.length, customers.length, staff.length]);
+
+  const servedSettlementStats = useMemo(() => {
+    let servedCount = 0;
+    let upiPendingCount = 0;
+    orders.forEach((o) => {
+      if (o.status !== 'served') return;
+      servedCount += 1;
+      if (
+        getEffectivePaymentMethod(o.payment_method) === 'upi' &&
+        getEffectivePaymentStatus(o.payment_status, o.status) === 'verification_pending'
+      ) {
+        upiPendingCount += 1;
+      }
+    });
+    return { servedCount, upiPendingCount };
+  }, [orders]);
 
   useEffect(() => {
     if (!shop) return;
@@ -348,6 +408,7 @@ export const OwnerDashboardPage: React.FC = () => {
     orders: 'Live Orders',
     menu: 'Menu Catalog',
     rooms: 'Rooms & Bookings',
+    customers: 'Customers & Rewards',
     qrcode: 'Storefront QR Code',
     staff: 'Staff Management',
     settings: 'Shop Settings',
@@ -369,9 +430,28 @@ export const OwnerDashboardPage: React.FC = () => {
       headerActions={
         <div className="flex items-center gap-2.5">
           {!shop.is_active && (
-            <span className="text-xs font-medium text-red-700 hidden sm:inline">
+            <span className="text-xs font-medium text-red-700 hidden md:inline">
               Storefront Suspended
             </span>
+          )}
+          {shop.modules?.orders && (
+            <button
+              type="button"
+              onClick={() => setPaymentSidebarOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border whitespace-nowrap shrink-0 cursor-pointer transition-colors ${
+                servedSettlementStats.upiPendingCount > 0
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100/70'
+                  : servedSettlementStats.servedCount > 0
+                    ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Payment Verification</span>
+              <span className="font-mono tabular-nums">
+                ({servedSettlementStats.servedCount})
+              </span>
+            </button>
           )}
           <button
             type="button"
@@ -440,6 +520,10 @@ export const OwnerDashboardPage: React.FC = () => {
         />
       )}
 
+      {activeTab === 'customers' && (
+        <CustomersPanel shop={shop} customers={customers} loading={customersLoading} />
+      )}
+
       {activeTab === 'qrcode' && (
         <QrCodePanel shop={shop} onOpenStorefront={() => navigate(`/s/${shop.slug}`)} />
       )}
@@ -453,6 +537,18 @@ export const OwnerDashboardPage: React.FC = () => {
           shop={shop}
           onOpenStorefront={() => navigate(`/s/${shop.slug}`)}
           onOpenQrCode={() => handleSelectTab('qrcode')}
+        />
+      )}
+
+      {shop.modules?.orders && (
+        <PaymentVerificationSidebar
+          shop={shop}
+          orders={orders}
+          canSettlePayment={true}
+          mode="drawer"
+          open={paymentSidebarOpen}
+          onClose={() => setPaymentSidebarOpen(false)}
+          nowMs={nowMs}
         />
       )}
     </WorkspaceShell>

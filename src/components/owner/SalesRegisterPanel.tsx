@@ -54,7 +54,9 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
 
   const allRows: LedgerRow[] = useMemo(() => {
-    const orderRows: LedgerRow[] = orders.map((o) => {
+    const orderRows: LedgerRow[] = orders
+      .filter((o) => o.status !== 'cancelled')
+      .map((o) => {
       const paymentMethod = getEffectivePaymentMethod(o.payment_method);
       const paymentStatus = getEffectivePaymentStatus(o.payment_status, o.status);
       return {

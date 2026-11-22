@@ -54,6 +54,12 @@ service cloud.firestore {
     function isValidUpiId(val) {
       return val is string && val.size() >= 3 && val.size() <= 128 && val.matches('^[a-zA-Z0-9._\\-]+@[a-zA-Z0-9]+$');
     }
+    function isValidCustomerName(val) {
+      return val is string && val.size() >= 2 && val.size() <= 80 && val.matches('^[A-Za-z][A-Za-z .\'\\-]{1,79}$');
+    }
+    function isValidIndianMobile(val) {
+      return val is string && val.size() == 13 && val.matches('^\\+91[6-9][0-9]{9}$');
+    }
 
     // Relational identity lookups (only evaluated after auth + static validation)
     function shopDoc(shopId) {
@@ -211,7 +217,7 @@ service cloud.firestore {
           'created_by_uid', 'created_at', 'updated_at'
         ])
         && data.keys().hasOnly([
-          'id', 'shop_id', 'order_number', 'customer_name', 'table_or_room',
+          'id', 'shop_id', 'order_number', 'customer_name', 'customer_phone', 'table_or_room',
           'items', 'total_amount', 'status', 'source', 'notes',
           'created_by_uid', 'payment_method', 'payment_status', 'utr_number', 'paid_at',
           'created_at', 'updated_at'
@@ -220,10 +226,11 @@ service cloud.firestore {
         && data.shop_id == shopId
         && data.order_number is string && data.order_number.size() >= 1 && data.order_number.size() <= 32
         && data.customer_name is string && data.customer_name.size() >= 1 && data.customer_name.size() <= 100
+        && (!('customer_phone' in data) || data.customer_phone == null || (data.customer_phone is string && data.customer_phone.size() <= 32))
         && data.table_or_room is string && data.table_or_room.size() >= 1 && data.table_or_room.size() <= 60
         && data.items is list && data.items.size() >= 1 && data.items.size() <= 30 && isValidOrderItem(data.items[0])
         && data.total_amount is number && data.total_amount >= 0 && data.total_amount <= 1000000
-        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid']
+        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid', 'cancelled']
         && data.source is string && data.source in ['server', 'guest']
         && data.notes is string && data.notes.size() <= 300
         && (data.created_by_uid == null || isValidId(data.created_by_uid))
@@ -251,7 +258,7 @@ service cloud.firestore {
         && data.table_or_room is string && data.table_or_room.size() >= 1 && data.table_or_room.size() <= 60
         && data.items is list && data.items.size() >= 1 && data.items.size() <= 30 && isValidOrderItem(data.items[0])
         && data.total_amount is number && data.total_amount >= 0 && data.total_amount <= 1000000
-        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid']
+        && data.status is string && data.status in ['pending', 'preparing', 'ready', 'served', 'paid', 'cancelled']
         && (!('payment_method' in data) || (data.payment_method is string && data.payment_method in ['cash', 'upi']))
         && (!('payment_status' in data) || (data.payment_status is string && data.payment_status in ['unpaid', 'verification_pending', 'paid']))
         && (!('paid_at' in data) || data.paid_at == null || data.paid_at is timestamp)
@@ -259,11 +266,34 @@ service cloud.firestore {
         && data.updated_at is timestamp;
     }
 
-    function isValidOrderTransition(prevStatus, nextStatus) {
-      return (prevStatus == 'pending' && nextStatus == 'preparing')
+    function isValidShopCustomer(data, shopId, customerId) {
+      return data.keys().hasAll([
+          'id', 'shop_id', 'full_name', 'mobile_number', 'email',
+          'reward_points', 'total_orders', 'total_spent', 'last_order_at',
+          'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'shop_id', 'full_name', 'mobile_number', 'email',
+          'reward_points', 'total_orders', 'total_spent', 'last_order_at',
+          'created_at', 'updated_at'
+        ])
+        && data.id == customerId
+        && data.shop_id == shopId
+        && isValidCustomerName(data.full_name)
+        && isValidIndianMobile(data.mobile_number)
+        && isValidEmail(data.email)
+        && data.reward_points is int && data.reward_points >= 0 && data.reward_points <= 10000000
+        && data.total_orders is int && data.total_orders >= 0 && data.total_orders <= 1000000
+        && data.total_spent is number && data.total_spent >= 0 && data.total_spent <= 100000000
+        && (data.last_order_at == null || data.last_order_at is timestamp)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidKitchenOrderTransition(prevStatus, nextStatus) {
+      return (prevStatus == 'pending' && nextStatus in ['preparing', 'cancelled'])
         || (prevStatus == 'preparing' && nextStatus == 'ready')
-        || (prevStatus == 'ready' && nextStatus == 'served')
-        || (prevStatus == 'served' && nextStatus == 'paid');
+        || (prevStatus == 'ready' && nextStatus == 'served');
     }
 
     function isValidRoom(data, shopId, roomId) {
@@ -525,14 +555,19 @@ service cloud.firestore {
           && (isSuperAdmin() || isShopOwner(shopId));
       }
 
-      // Subcollection: Orders (Realtime Stream; Server Create & Status Update; Staff Payment Verify; Owner Read; Public Guest Create)
+      // Subcollection: Orders (Realtime Stream; Server Create & Status Update; Staff Payment Verify; Owner Read; Public Guest Create; Customer Own-Order History)
       match /orders/{orderId} {
         allow get: if isVerifiedUser()
           && isValidId(shopId)
           && isValidId(orderId)
-          && (isSuperAdmin() || isShopStaff(shopId));
+          && (
+            isSuperAdmin()
+            || isShopStaff(shopId)
+            || (existing().source == 'guest' && existing().created_by_uid == request.auth.uid)
+          );
         allow list: if isSuperAdmin()
-          || (isVerifiedUser() && resource.data.shop_id == shopId && isShopStaff(shopId));
+          || (isVerifiedUser() && resource.data.shop_id == shopId && isShopStaff(shopId))
+          || (isVerifiedUser() && resource.data.shop_id == shopId && resource.data.source == 'guest' && resource.data.created_by_uid == request.auth.uid);
         allow create: if isValidId(shopId)
           && isValidId(orderId)
           && isValidOrder(incoming(), shopId, orderId)
@@ -547,7 +582,13 @@ service cloud.firestore {
           && (
             (isSuperAdmin() && incoming().source in ['server', 'guest'])
             || (isShopStaff(shopId) && incoming().source == 'server' && incoming().created_by_uid == request.auth.uid)
-            || (incoming().source == 'guest' && (incoming().created_by_uid == null || (isSignedIn() && incoming().created_by_uid == request.auth.uid)))
+            || (
+              incoming().source == 'guest'
+              && isValidCustomerName(incoming().customer_name)
+              && ('customer_phone' in incoming())
+              && isValidIndianMobile(incoming().customer_phone)
+              && (incoming().created_by_uid == null || (isVerifiedUser() && incoming().created_by_uid == request.auth.uid))
+            )
           );
         allow update: if isValidId(shopId)
           && isValidId(orderId)
@@ -565,29 +606,48 @@ service cloud.firestore {
                 || (
                   isShopStaff(shopId)
                   && existing().status != 'paid'
-                  && isValidOrderTransition(existing().status, incoming().status)
+                  && existing().status != 'cancelled'
+                  && isValidKitchenOrderTransition(existing().status, incoming().status)
                   && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
                 )
                 || (
-                  isShopStaff(shopId)
+                  isShopOwner(shopId)
+                  && existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().status == 'cancelled'
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopOwner(shopId)
+                  && existing().status == 'served'
+                  && incoming().status == 'paid'
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopOwner(shopId)
                   && existing().status == 'served'
                   && incoming().status == 'paid'
                   && incoming().payment_status == 'paid'
+                  && incoming().payment_method in ['cash', 'upi']
                   && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_status', 'paid_at', 'updated_at'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
                 )
                 || (
-                  isShopStaff(shopId)
+                  isShopOwner(shopId)
+                  && existing().status != 'cancelled'
                   && (!('payment_status' in existing()) || existing().payment_status != 'paid')
                   && incoming().payment_status == 'paid'
+                  && incoming().payment_method in ['cash', 'upi']
                   && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_status', 'paid_at', 'updated_at'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
                 )
               )
             )
             || (
               existing().source == 'guest'
               && existing().status != 'paid'
+              && existing().status != 'cancelled'
               && incoming().source == 'guest'
               && incoming().customer_name == existing().customer_name
               && incoming().table_or_room == existing().table_or_room
@@ -605,6 +665,7 @@ service cloud.firestore {
             || (
               existing().source == 'guest'
               && existing().status != 'paid'
+              && existing().status != 'cancelled'
               && (!('payment_status' in existing()) || existing().payment_status != 'paid')
               && incoming().source == 'guest'
               && incoming().customer_name == existing().customer_name
@@ -618,6 +679,23 @@ service cloud.firestore {
               && incoming().payment_status in ['unpaid', 'verification_pending']
               && (!('paid_at' in incoming()) || incoming().paid_at == null)
               && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+            )
+            || (
+              existing().source == 'guest'
+              && existing().status == 'pending'
+              && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
+              && incoming().source == 'guest'
+              && incoming().customer_name == existing().customer_name
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().created_by_uid == existing().created_by_uid
+              && incoming().status == 'cancelled'
+              && incoming().items == existing().items
+              && incoming().total_amount == existing().total_amount
+              && incoming().notes == existing().notes
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
               && exists(/databases/$(database)/documents/shops/$(shopId))
               && shopDoc(shopId).data.is_active == true
               && shopDoc(shopId).data.modules.orders == true
@@ -658,28 +736,47 @@ service cloud.firestore {
                 || (
                   isShopStaff(shopId)
                   && existing().status != 'paid'
-                  && isValidOrderTransition(existing().status, incoming().status)
+                  && existing().status != 'cancelled'
+                  && isValidKitchenOrderTransition(existing().status, incoming().status)
                   && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
                 )
                 || (
-                  isShopStaff(shopId)
+                  isShopOwner(shopId)
+                  && existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().status == 'cancelled'
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopOwner(shopId)
+                  && existing().status == 'served'
+                  && incoming().status == 'paid'
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+                || (
+                  isShopOwner(shopId)
                   && existing().status == 'served'
                   && incoming().status == 'paid'
                   && incoming().payment_status == 'paid'
+                  && incoming().payment_method in ['cash', 'upi']
                   && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_status', 'paid_at', 'updated_at'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
                 )
                 || (
-                  isShopStaff(shopId)
+                  isShopOwner(shopId)
+                  && existing().status != 'cancelled'
                   && (!('payment_status' in existing()) || existing().payment_status != 'paid')
                   && incoming().payment_status == 'paid'
+                  && incoming().payment_method in ['cash', 'upi']
                   && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_status', 'paid_at', 'updated_at'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
                 )
               )
             )
             || (
               existing().status != 'paid'
+              && existing().status != 'cancelled'
               && incoming().table_or_room == existing().table_or_room
               && incoming().status == 'pending'
               && incoming().items.size() >= existing().items.size()
@@ -695,6 +792,7 @@ service cloud.firestore {
             )
             || (
               existing().status != 'paid'
+              && existing().status != 'cancelled'
               && (!('payment_status' in existing()) || existing().payment_status != 'paid')
               && incoming().table_or_room == existing().table_or_room
               && incoming().status == existing().status
@@ -710,6 +808,19 @@ service cloud.firestore {
               && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_method == incoming().payment_method
               && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_status == incoming().payment_status
               && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.total_amount == existing().total_amount
+            )
+            || (
+              existing().status == 'pending'
+              && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().status == 'cancelled'
+              && incoming().items == existing().items
+              && incoming().total_amount == existing().total_amount
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.status == 'cancelled'
             )
           );
         allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(orderId);
@@ -804,7 +915,7 @@ service cloud.firestore {
               && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
             )
             || (
-              isShopStaff(shopId)
+              isShopOwner(shopId)
               && shopDoc(shopId).data.modules.rooms == true
               && existing().status != 'cancelled'
               && (!('payment_status' in existing()) || existing().payment_status != 'paid')
@@ -851,6 +962,54 @@ service cloud.firestore {
           && isValidId(shopId)
           && isValidId(bookingId)
           && (isSuperAdmin() || (isShopOwner(shopId) && shopDoc(shopId).data.modules.rooms == true));
+      }
+
+      // Subcollection: Registered Restaurant Customers (Per-Shop Member Accounts & Reward Points)
+      match /customers/{customerId} {
+        allow get: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(customerId)
+          && (isSuperAdmin() || isShopStaff(shopId) || request.auth.uid == customerId);
+        allow list: if isSuperAdmin()
+          || (isVerifiedUser() && resource.data.shop_id == shopId && isShopOwner(shopId));
+        allow create: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(customerId)
+          && isValidShopCustomer(incoming(), shopId, customerId)
+          && request.auth.uid == customerId
+          && incoming().email == authEmail()
+          && incoming().reward_points == 0
+          && incoming().total_orders == 0
+          && incoming().total_spent == 0
+          && incoming().last_order_at == null
+          && incoming().created_at == request.time
+          && incoming().updated_at == request.time
+          && exists(/databases/$(database)/documents/shops/$(shopId))
+          && shopDoc(shopId).data.is_active == true;
+        allow update: if isVerifiedUser()
+          && isValidId(shopId)
+          && isValidId(customerId)
+          && isValidShopCustomer(incoming(), shopId, customerId)
+          && incoming().id == existing().id
+          && incoming().shop_id == existing().shop_id
+          && incoming().email == existing().email
+          && incoming().created_at == existing().created_at
+          && incoming().updated_at == request.time
+          && (
+            isSuperAdmin()
+            || (
+              request.auth.uid == customerId
+              && incoming().diff(existing()).affectedKeys().hasOnly(['full_name', 'mobile_number', 'updated_at'])
+            )
+            || (
+              isShopOwner(shopId)
+              && incoming().reward_points >= existing().reward_points
+              && incoming().total_orders >= existing().total_orders
+              && incoming().total_spent >= existing().total_spent
+              && incoming().diff(existing()).affectedKeys().hasOnly(['reward_points', 'total_orders', 'total_spent', 'last_order_at', 'updated_at'])
+            )
+          );
+        allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(customerId);
       }
     }
   }

@@ -34,6 +34,7 @@ import {
   RoomBooking,
   RoomStatus,
   Shop,
+  ShopCustomer,
   ShopModules,
   ShopSlugRecord,
   ShopType,
@@ -41,7 +42,17 @@ import {
   SUPER_ADMIN_EMAIL,
   UserProfile,
 } from '../types';
-import { clampString, isSafeMediaUrl, isValidEmail, isValidHexColor, isValidSlug } from './validation';
+import {
+  calculateRewardPoints,
+  clampString,
+  isSafeMediaUrl,
+  isValidEmail,
+  isValidHexColor,
+  isValidSlug,
+  validateCustomerName,
+  validateIndianMobile,
+  validateTableOrRoom,
+} from './validation';
 import { addDaysIso, getTodayIso } from './dateUtils';
 import { isValidUpiId } from './upi';
 
@@ -765,6 +776,7 @@ export function subscribeShopOrders(
 export interface CreateOrderInput {
   order_number?: string;
   customer_name: string;
+  customer_phone?: string | null;
   table_or_room: string;
   items: OrderItem[];
   notes: string;
@@ -776,12 +788,40 @@ export interface CreateOrderInput {
 }
 
 export async function createShopOrder(shopId: string, input: CreateOrderInput): Promise<Order> {
-  const customerName = clampString(input.customer_name, 100);
-  const tableOrRoom = clampString(input.table_or_room, 60);
+  let customerName = clampString(input.customer_name, 100);
+  let customerPhone: string | null = input.customer_phone
+    ? clampString(input.customer_phone, 32)
+    : null;
+  let tableOrRoom = clampString(input.table_or_room, 60);
   const notes = clampString(input.notes || '', 300);
 
-  if (!customerName) throw new Error('Customer name is required.');
-  if (!tableOrRoom) throw new Error('Table or room number is required.');
+  if (input.source === 'guest') {
+    const nameCheck = validateCustomerName(input.customer_name);
+    if (!nameCheck.valid) {
+      throw new Error(nameCheck.error || 'Please enter a valid full name.');
+    }
+    const mobileCheck = validateIndianMobile(input.customer_phone || '');
+    if (!mobileCheck.valid) {
+      throw new Error(mobileCheck.error || 'Please enter a valid 10-digit Indian mobile number.');
+    }
+    const tableCheck = validateTableOrRoom(input.table_or_room);
+    if (!tableCheck.valid) {
+      throw new Error(tableCheck.error || 'Please enter a valid table or room number.');
+    }
+    customerName = nameCheck.value;
+    customerPhone = mobileCheck.value;
+    tableOrRoom = tableCheck.value;
+  } else {
+    if (!customerName) throw new Error('Customer name is required.');
+    if (!tableOrRoom) throw new Error('Table or room number is required.');
+    if (customerPhone) {
+      const mobileCheck = validateIndianMobile(customerPhone);
+      if (mobileCheck.valid) {
+        customerPhone = mobileCheck.value;
+      }
+    }
+  }
+
   if (!input.items.length || input.items.length > 30) {
     throw new Error('Order must contain between 1 and 30 line items.');
   }
@@ -815,6 +855,7 @@ export async function createShopOrder(shopId: string, input: CreateOrderInput): 
     shop_id: shopId,
     order_number: orderNumber,
     customer_name: customerName,
+    customer_phone: customerPhone,
     table_or_room: tableOrRoom,
     items: sanitizedItems,
     total_amount: totalAmount,
@@ -860,6 +901,40 @@ export async function createShopOrder(shopId: string, input: CreateOrderInput): 
   }
 }
 
+async function appendCustomerRewardToBatch(
+  batch: ReturnType<typeof writeBatch>,
+  shopId: string,
+  orderId: string
+): Promise<void> {
+  try {
+    const orderSnap = await getDoc(doc(db, 'shops', shopId, 'orders', orderId));
+    if (!orderSnap.exists()) return;
+    const orderData = orderSnap.data() as Order;
+    if (orderData.payment_status === 'paid' || orderData.status === 'paid') return;
+    if (!orderData.created_by_uid || orderData.source !== 'guest') return;
+
+    const customerRef = doc(db, 'shops', shopId, 'customers', orderData.created_by_uid);
+    const customerSnap = await getDoc(customerRef);
+    if (!customerSnap.exists()) return;
+
+    const customer = customerSnap.data() as ShopCustomer;
+    const earnedPoints = calculateRewardPoints(orderData.total_amount);
+    const nextSpent =
+      Math.round(((Number(customer.total_spent) || 0) + (Number(orderData.total_amount) || 0)) * 100) /
+      100;
+
+    batch.update(customerRef, {
+      reward_points: (Number(customer.reward_points) || 0) + earnedPoints,
+      total_orders: (Number(customer.total_orders) || 0) + 1,
+      total_spent: nextSpent,
+      last_order_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    });
+  } catch {
+    // Reward accrual is best-effort and must never block order settlement
+  }
+}
+
 export async function updateOrderStatus(
   shopId: string,
   orderId: string,
@@ -883,14 +958,15 @@ export async function updateOrderStatus(
 
   try {
     const trackerSnap = await getDoc(trackerRef);
+    const batch = writeBatch(db);
+    batch.update(orderRef, updateData);
     if (trackerSnap.exists()) {
-      const batch = writeBatch(db);
-      batch.update(orderRef, updateData);
       batch.update(trackerRef, updateData);
-      await batch.commit();
-    } else {
-      await updateDoc(orderRef, updateData);
     }
+    if (shouldMarkPaid) {
+      await appendCustomerRewardToBatch(batch, shopId, orderId);
+    }
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `shops/${shopId}/orders/${orderId}`);
   }
@@ -902,6 +978,92 @@ export async function confirmOrderPayment(shopId: string, orderId: string): Prom
   const updateData = {
     payment_status: 'paid' as PaymentStatus,
     paid_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  };
+  try {
+    const trackerSnap = await getDoc(trackerRef);
+    const batch = writeBatch(db);
+    batch.update(orderRef, updateData);
+    if (trackerSnap.exists()) {
+      batch.update(trackerRef, updateData);
+    }
+    await appendCustomerRewardToBatch(batch, shopId, orderId);
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `shops/${shopId}/orders/${orderId}`);
+  }
+}
+
+export interface SettleOrderPaymentInput {
+  payment_method: PaymentMethod;
+  utr_number?: string | null;
+  transitionToPaid?: boolean;
+}
+
+export async function settleOrderPayment(
+  shopId: string,
+  orderId: string,
+  input: SettleOrderPaymentInput
+): Promise<void> {
+  const orderRef = doc(db, 'shops', shopId, 'orders', orderId);
+  const trackerRef = doc(db, 'shops', shopId, 'order_trackers', orderId);
+  const paymentMethod: PaymentMethod = input.payment_method === 'upi' ? 'upi' : 'cash';
+  const cleanUtr =
+    paymentMethod === 'upi' && input.utr_number ? clampString(input.utr_number, 64) : '';
+  const utrNumber: string | null = cleanUtr ? cleanUtr : null;
+  const shouldMarkOrderPaid = input.transitionToPaid !== false;
+
+  const orderUpdate = shouldMarkOrderPaid
+    ? {
+        status: 'paid' as OrderStatus,
+        payment_method: paymentMethod,
+        payment_status: 'paid' as PaymentStatus,
+        utr_number: utrNumber,
+        paid_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      }
+    : {
+        payment_method: paymentMethod,
+        payment_status: 'paid' as PaymentStatus,
+        utr_number: utrNumber,
+        paid_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      };
+
+  const trackerUpdate = shouldMarkOrderPaid
+    ? {
+        status: 'paid' as OrderStatus,
+        payment_method: paymentMethod,
+        payment_status: 'paid' as PaymentStatus,
+        paid_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      }
+    : {
+        payment_method: paymentMethod,
+        payment_status: 'paid' as PaymentStatus,
+        paid_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      };
+
+  try {
+    const trackerSnap = await getDoc(trackerRef);
+    const batch = writeBatch(db);
+    batch.update(orderRef, orderUpdate);
+    if (trackerSnap.exists()) {
+      batch.update(trackerRef, trackerUpdate);
+    }
+    await appendCustomerRewardToBatch(batch, shopId, orderId);
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `shops/${shopId}/orders/${orderId}`);
+  }
+}
+
+export async function cancelOrder(shopId: string, orderId: string): Promise<void> {
+  const orderRef = doc(db, 'shops', shopId, 'orders', orderId);
+  const trackerRef = doc(db, 'shops', shopId, 'order_trackers', orderId);
+  const updateData = {
+    status: 'cancelled' as OrderStatus,
     updated_at: serverTimestamp(),
   };
   try {
@@ -1005,6 +1167,9 @@ export async function appendItemsToGuestOrder(
   if (input.existingTracker.status === 'paid') {
     throw new Error('This order has already been settled.');
   }
+  if (input.existingTracker.status === 'cancelled') {
+    throw new Error('This order was cancelled. Please place a new order.');
+  }
 
   const mergedItems = mergeOrderItems(input.existingTracker.items, input.addedItems);
   if (mergedItems.length > 30) {
@@ -1077,6 +1242,9 @@ export async function submitGuestOrderPayment(
 ): Promise<OrderTracker> {
   if (input.existingTracker.status === 'paid' || input.existingTracker.payment_status === 'paid') {
     throw new Error('This bill has already been marked paid.');
+  }
+  if (input.existingTracker.status === 'cancelled') {
+    throw new Error('This order has been cancelled and does not require payment.');
   }
 
   const paymentMethod: PaymentMethod = input.payment_method === 'upi' ? 'upi' : 'cash';
@@ -1725,6 +1893,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
     }));
     const created = await createShopOrder(shopId, {
       customer_name: ord.customer_name,
+      customer_phone: `+9198204123${String(40 + starterOrders.indexOf(ord)).padStart(2, '0')}`,
       table_or_room: ord.table_or_room,
       items,
       notes: '',
@@ -1743,4 +1912,172 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
   }
 
   return shopId;
+}
+
+// ---------------------------------------------------------------------------
+// Per-Restaurant Customer Accounts & Rewards (Storefront Member Login & Owner CRM)
+// ---------------------------------------------------------------------------
+export function subscribeShopCustomer(
+  shopId: string,
+  uid: string,
+  onData: (customer: ShopCustomer | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const ref = doc(db, 'shops', shopId, 'customers', uid);
+  return onSnapshot(
+    ref,
+    (snapshot) => {
+      onData(snapshot.exists() ? (snapshot.data() as ShopCustomer) : null);
+    },
+    (error) => {
+      if (onError) onError(error);
+      try {
+        handleFirestoreError(error, OperationType.GET, `shops/${shopId}/customers/${uid}`);
+      } catch {
+        // Logged
+      }
+    }
+  );
+}
+
+export interface RegisterShopCustomerInput {
+  uid: string;
+  email: string;
+  full_name: string;
+  mobile_number: string;
+}
+
+export async function registerShopCustomer(
+  shopId: string,
+  input: RegisterShopCustomerInput
+): Promise<ShopCustomer> {
+  const nameCheck = validateCustomerName(input.full_name);
+  if (!nameCheck.valid) {
+    throw new Error(nameCheck.error || 'Please enter a valid full name.');
+  }
+  const mobileCheck = validateIndianMobile(input.mobile_number);
+  if (!mobileCheck.valid) {
+    throw new Error(mobileCheck.error || 'Please enter a valid 10-digit Indian mobile number.');
+  }
+  const normalizedEmail = input.email.trim().toLowerCase();
+  if (!isValidEmail(normalizedEmail)) {
+    throw new Error('A verified email address is required to register.');
+  }
+
+  const ref = doc(db, 'shops', shopId, 'customers', input.uid);
+  const payload = {
+    id: input.uid,
+    shop_id: shopId,
+    full_name: nameCheck.value,
+    mobile_number: mobileCheck.value,
+    email: normalizedEmail,
+    reward_points: 0,
+    total_orders: 0,
+    total_spent: 0,
+    last_order_at: null,
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  };
+
+  try {
+    await setDoc(ref, payload);
+    return {
+      ...payload,
+      created_at: Timestamp.now(),
+      updated_at: Timestamp.now(),
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `shops/${shopId}/customers/${input.uid}`);
+  }
+}
+
+export async function updateShopCustomerProfile(
+  shopId: string,
+  uid: string,
+  input: { full_name: string; mobile_number: string }
+): Promise<{ full_name: string; mobile_number: string }> {
+  const nameCheck = validateCustomerName(input.full_name);
+  if (!nameCheck.valid) {
+    throw new Error(nameCheck.error || 'Please enter a valid full name.');
+  }
+  const mobileCheck = validateIndianMobile(input.mobile_number);
+  if (!mobileCheck.valid) {
+    throw new Error(mobileCheck.error || 'Please enter a valid 10-digit Indian mobile number.');
+  }
+
+  try {
+    await updateDoc(doc(db, 'shops', shopId, 'customers', uid), {
+      full_name: nameCheck.value,
+      mobile_number: mobileCheck.value,
+      updated_at: serverTimestamp(),
+    });
+    return { full_name: nameCheck.value, mobile_number: mobileCheck.value };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `shops/${shopId}/customers/${uid}`);
+  }
+}
+
+export function subscribeCustomerOrders(
+  shopId: string,
+  uid: string,
+  onData: (orders: Order[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'shops', shopId, 'orders'),
+    where('shop_id', '==', shopId),
+    where('source', '==', 'guest'),
+    where('created_by_uid', '==', uid)
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs
+        .map((d) => d.data() as Order)
+        .sort((a, b) => {
+          const tA = a.created_at instanceof Timestamp ? a.created_at.toMillis() : Date.now();
+          const tB = b.created_at instanceof Timestamp ? b.created_at.toMillis() : Date.now();
+          return tB - tA;
+        });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, `shops/${shopId}/orders`);
+      } catch {
+        // Logged
+      }
+    }
+  );
+}
+
+export function subscribeShopCustomersList(
+  shopId: string,
+  onData: (customers: ShopCustomer[]) => void
+): () => void {
+  const q = query(
+    collection(db, 'shops', shopId, 'customers'),
+    where('shop_id', '==', shopId)
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs
+        .map((d) => d.data() as ShopCustomer)
+        .sort((a, b) => {
+          const ptsDiff = (b.reward_points || 0) - (a.reward_points || 0);
+          if (ptsDiff !== 0) return ptsDiff;
+          const tA = a.created_at instanceof Timestamp ? a.created_at.toMillis() : 0;
+          const tB = b.created_at instanceof Timestamp ? b.created_at.toMillis() : 0;
+          return tB - tA;
+        });
+      onData(list);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, `shops/${shopId}/customers`);
+      } catch {
+        // Logged
+      }
+    }
+  );
 }

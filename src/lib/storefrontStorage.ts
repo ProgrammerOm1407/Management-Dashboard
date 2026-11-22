@@ -34,6 +34,7 @@ export interface PersistedStorefrontState {
   updatedAt: number;
   cart: Record<string, number>;
   guestName: string;
+  guestPhone?: string;
   tableOrRoom: string;
   notes: string;
   orderPaymentMethod: PaymentMethod;
@@ -107,7 +108,10 @@ function safeRemoveItem(key: string): void {
 }
 
 function isValidOrderStatus(val: unknown): val is OrderStatus {
-  return typeof val === 'string' && ORDER_STATUS_FLOW.includes(val as OrderStatus);
+  return (
+    typeof val === 'string' &&
+    (ORDER_STATUS_FLOW.includes(val as OrderStatus) || val === 'cancelled')
+  );
 }
 
 function sanitizeCart(raw: unknown): Record<string, number> {
@@ -289,6 +293,7 @@ export function readStorefrontState(shopId: string): PersistedStorefrontState | 
       updatedAt,
       cart: sanitizeCart(parsed.cart),
       guestName: typeof parsed.guestName === 'string' ? parsed.guestName.slice(0, 100) : '',
+      guestPhone: typeof parsed.guestPhone === 'string' ? parsed.guestPhone.slice(0, 32) : '',
       tableOrRoom: typeof parsed.tableOrRoom === 'string' ? parsed.tableOrRoom.slice(0, 60) : '',
       notes: typeof parsed.notes === 'string' ? parsed.notes.slice(0, 300) : '',
       orderPaymentMethod: parsed.orderPaymentMethod === 'upi' ? 'upi' : 'cash',
