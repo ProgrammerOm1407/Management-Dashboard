@@ -62,11 +62,12 @@ const RootRedirect: React.FC = () => {
 };
 
 export default function App() {
+  const routerBasename = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
   return (
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={routerBasename}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route

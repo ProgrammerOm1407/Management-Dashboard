@@ -65,12 +65,14 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
   const accent = shop.primary_color || '#2563EB';
   const singleDisplayTable = useMemo(() => formatSingleDisplayLabel(tableLabel), [tableLabel]);
 
+  const basePrefix = useMemo(() => import.meta.env.BASE_URL.replace(/\/+$/, ''), []);
+
   const targetUrl = useMemo(() => {
-    const base = `${window.location.origin}/s/${shop.slug}`;
+    const base = `${window.location.origin}${basePrefix}/s/${shop.slug}`;
     const trimmedTable = tableLabel.trim();
     if (!trimmedTable) return base;
     return `${base}?table=${encodeURIComponent(trimmedTable)}`;
-  }, [shop.slug, tableLabel]);
+  }, [basePrefix, shop.slug, tableLabel]);
 
   const displayPath = useMemo(() => {
     const base = `/s/${shop.slug}`;
@@ -146,7 +148,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
         const label = `${cleanPrefix} ${num}`;
         const queryValue = isStandardTable ? String(num) : label;
         const displayPathVal = `/s/${shop.slug}?table=${encodeURIComponent(queryValue)}`;
-        const url = `${window.location.origin}${displayPathVal}`;
+        const url = `${window.location.origin}${basePrefix}${displayPathVal}`;
         const dataUrl = await QRCode.toDataURL(url, {
           width: 480,
           margin: 2,
@@ -179,7 +181,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
     return () => {
       cancelled = true;
     };
-  }, [mode, shop.slug, batchPrefix, batchRange.start, batchRange.end]);
+  }, [mode, basePrefix, shop.slug, batchPrefix, batchRange.start, batchRange.end]);
 
   const fileSuffix = useMemo(() => {
     const t = slugify(singleDisplayTable);
