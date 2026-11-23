@@ -224,6 +224,13 @@ export const DEFAULT_HERO_IMAGE = '/src/assets/images/hospitality_cafe_hero_1795
 export const DEFAULT_DISH_IMAGE = '/src/assets/images/culinary_dish_plate_1795324938671.jpg';
 export const DEFAULT_SUITE_IMAGE = '/src/assets/images/boutique_hotel_suite_1795324939826.jpg';
 
+export const DISH_IMAGE_CARDAMOM_BUN = '/src/assets/images/dish_cardamom_bun_1795429568926.jpg';
+export const DISH_IMAGE_MASALA_CHAI = '/src/assets/images/dish_masala_chai_1795429568425.jpg';
+export const DISH_IMAGE_FILTER_KAAPI = '/src/assets/images/dish_filter_kaapi_1795429567787.jpg';
+export const DISH_IMAGE_KOKUM_COOLER = '/src/assets/images/dish_kokum_cooler_1795429567226.jpg';
+export const DISH_IMAGE_AVOCADO_TARTINE = '/src/assets/images/dish_avocado_tartine_1795429568855.jpg';
+export const DISH_IMAGE_PANEER_MELT = '/src/assets/images/dish_paneer_melt_1795429567948.jpg';
+
 export const ORDER_STATUS_FLOW: OrderStatus[] = ['pending', 'preparing', 'ready', 'served', 'paid'];
 export const KITCHEN_KANBAN_STAGES: OrderStatus[] = ['pending', 'preparing', 'ready'];
 export const KITCHEN_ACTIVE_STAGES: OrderStatus[] = ['pending', 'preparing', 'ready', 'served'];

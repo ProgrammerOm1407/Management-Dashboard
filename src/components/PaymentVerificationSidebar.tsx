@@ -197,26 +197,26 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
 
   const panelBody = (
     <div
-      className={`flex flex-col bg-white ${
+      className={`flex flex-col ${
         mode === 'drawer'
-          ? 'h-full w-full max-w-md border-l border-slate-200 shadow-2xl'
-          : 'border border-slate-200 rounded-lg overflow-hidden h-full'
+          ? 'h-full w-full max-w-md glass-drawer'
+          : 'surface-card rounded-2xl overflow-hidden h-full'
       }`}
     >
       {/* Header */}
-      <div className="px-4 py-3.5 border-b border-slate-200 bg-slate-50/80 shrink-0">
+      <div className="px-4 py-4 border-b border-stone-200/75 bg-stone-50/55 shrink-0">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-slate-800 shrink-0" />
-              <h3 className="font-display text-sm font-semibold text-slate-900 truncate">
+              <ShieldCheck className="w-4 h-4 text-stone-900 shrink-0" />
+              <h3 className="font-display text-sm font-bold text-stone-950 truncate">
                 Payment Verification
               </h3>
-              <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
+              <span className="font-mono text-xs font-semibold text-stone-600 tabular-nums">
                 {summary.totalCount}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+            <p className="text-[11px] text-stone-500 mt-0.5">
               {canSettlePayment
                 ? 'Served tables awaiting final Cash or UPI confirmation.'
                 : 'Served tables awaiting Owner payment settlement.'}
@@ -227,7 +227,7 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
               type="button"
               onClick={onClose}
               aria-label="Close Payment Verification sidebar"
-              className="p-1 text-slate-400 hover:text-slate-700 rounded-md cursor-pointer shrink-0"
+              className="p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-md transition-colors cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -235,18 +235,18 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
         </div>
 
         {/* Pending Settlement Totals Bar */}
-        <div className="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-2 gap-3">
+        <div className="mt-3.5 pt-3 border-t border-stone-200/80 grid grid-cols-2 gap-3">
           <div>
-            <p className="text-[11px] text-slate-500">Outstanding Served</p>
-            <p className="font-mono text-base font-semibold text-slate-900 tabular-nums mt-0.5">
+            <p className="text-[11px] text-stone-500">Outstanding Served</p>
+            <p className="font-mono text-base font-bold text-stone-950 tabular-nums mt-0.5">
               {formatCurrency(summary.totalDue)}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[11px] text-slate-500">UPI Awaiting Check</p>
+            <p className="text-[11px] text-stone-500">UPI Awaiting Check</p>
             <p
-              className={`font-mono text-base font-semibold tabular-nums mt-0.5 ${
-                summary.upiPendingCount > 0 ? 'text-amber-700' : 'text-slate-600'
+              className={`font-mono text-base font-bold tabular-nums mt-0.5 ${
+                summary.upiPendingCount > 0 ? 'text-amber-700' : 'text-stone-600'
               }`}
             >
               {summary.upiPendingCount}
@@ -268,7 +268,7 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
         {/* Filter Segmented Control + Quick Search */}
         {servedOrders.length > 0 && (
           <div className="mt-3 space-y-2">
-            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-200/70 rounded-md">
+            <div className="grid grid-cols-3 gap-1 p-1 glass-segmented rounded-xl">
               {(
                 [
                   { id: 'all', label: `All (${summary.totalCount})` },
@@ -280,12 +280,12 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
                   key={tab.id}
                   type="button"
                   onClick={() => setFilter(tab.id)}
-                  className={`px-2 py-1 text-[11px] font-medium rounded transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`px-2 py-1 text-[11px] font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                     filter === tab.id
-                      ? 'bg-white text-slate-900 shadow-xs'
+                      ? 'bg-white text-stone-950 shadow-xs'
                       : tab.id === 'upi_pending' && summary.upiPendingCount > 0
                         ? 'text-amber-800 hover:text-amber-900'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-stone-600 hover:text-stone-950'
                   }`}
                 >
                   {tab.label}
@@ -353,10 +353,10 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
                   isHighlightedUpi
                     ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-400'
                     : isWalkOutRisk
-                      ? 'bg-red-50/40'
+                      ? 'bg-red-50/50'
                       : isUpiPending
-                        ? 'bg-amber-50/40'
-                        : 'bg-white'
+                        ? 'bg-amber-50/50'
+                        : 'bg-white/45'
                 }`}
               >
                 {/* Row 1: Table, Order #, Guest, Total & Served Timer */}
@@ -577,7 +577,7 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
       </div>
 
       {/* Footer RBAC Summary */}
-      <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50/70 text-[11px] text-slate-500 shrink-0">
+      <div className="px-4 py-2.5 border-t border-stone-200/75 bg-stone-50/55 text-[11px] text-stone-500 shrink-0">
         {canSettlePayment
           ? 'Settling marks orders Paid and updates the Sales Register immediately.'
           : 'Notify the Shop Owner before releasing tables with unpaid served bills.'}
@@ -589,7 +589,7 @@ export const PaymentVerificationSidebar: React.FC<PaymentVerificationSidebarProp
     return (
       <div className="fixed inset-0 z-50 flex justify-end">
         <div
-          className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+          className="fixed inset-0 glass-backdrop"
           onClick={onClose}
         />
         <div className="relative z-10 h-full w-full max-w-md">{panelBody}</div>

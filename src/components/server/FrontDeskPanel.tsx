@@ -279,49 +279,49 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
 
       {/* 4-Column Front Desk Summary Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-xs font-medium text-slate-500">Pending Requests</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-amber-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5">
+          <p className="text-xs font-medium text-stone-500">Pending Requests</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-amber-700 tabular-nums">
             {summary.pendingRequests}
           </p>
-          <p className="mt-0.5 text-xs text-slate-500">Awaiting desk approval</p>
+          <p className="mt-1 text-xs text-stone-500">Awaiting desk approval</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-xs font-medium text-slate-500">Arrivals Today</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-blue-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5">
+          <p className="text-xs font-medium text-stone-500">Arrivals Today</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-blue-700 tabular-nums">
             {summary.arrivalsToday}
           </p>
-          <p className="mt-0.5 text-xs text-slate-500 font-mono tabular-nums">{todayIso}</p>
+          <p className="mt-1 text-xs text-stone-500 font-mono tabular-nums">{todayIso}</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-xs font-medium text-slate-500">Departures Today</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-slate-900 tabular-nums">
+        <div className="surface-card rounded-2xl p-5">
+          <p className="text-xs font-medium text-stone-500">Departures Today</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-stone-950 tabular-nums">
             {summary.departuresToday}
           </p>
-          <p className="mt-0.5 text-xs text-slate-500">Scheduled check-outs</p>
+          <p className="mt-1 text-xs text-stone-500">Scheduled check-outs</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-xs font-medium text-slate-500">Rooms Ready</p>
-          <p className="mt-1.5 font-mono text-2xl font-semibold text-emerald-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5">
+          <p className="text-xs font-medium text-stone-500">Rooms Ready</p>
+          <p className="mt-2 font-mono text-2xl font-semibold text-emerald-700 tabular-nums">
             {summary.roomsAvailable}
-            <span className="text-sm font-normal text-slate-400"> / {rooms.length}</span>
+            <span className="text-sm font-normal text-stone-400"> / {rooms.length}</span>
           </p>
-          <p className="mt-0.5 text-xs text-slate-500">Available for check-in</p>
+          <p className="mt-1 text-xs text-stone-500">Available for check-in</p>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
         {/* Reservations Desk Queue */}
-        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="lg:col-span-8 surface-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-stone-200/75 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <KeyRound className="w-4 h-4 text-slate-500" />
-              <h3 className="font-display text-sm font-semibold text-slate-900">
+              <KeyRound className="w-4 h-4 text-stone-500" />
+              <h3 className="font-display text-sm font-semibold text-stone-950">
                 Check-Ins, Check-Outs & Requests
               </h3>
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto max-w-full">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl overflow-x-auto max-w-full">
               {(
                 [
                   { id: 'today', label: 'Today & Active' },
@@ -334,10 +334,10 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setFilter(tab.id)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                     filter === tab.id
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white text-stone-950 shadow-xs'
+                      : 'text-stone-600 hover:text-stone-950'
                   }`}
                 >
                   {tab.label}
@@ -516,11 +516,11 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
         </div>
 
         {/* Live Room Status Board */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="lg:col-span-4 surface-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-stone-200/75 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <BedDouble className="w-4 h-4 text-slate-500" />
-              <h3 className="font-display text-sm font-semibold text-slate-900">Room Status</h3>
+              <BedDouble className="w-4 h-4 text-stone-500" />
+              <h3 className="font-display text-sm font-semibold text-stone-950">Room Status</h3>
             </div>
             <span className="font-mono text-xs text-slate-500 tabular-nums">
               {rooms.length} {rooms.length === 1 ? 'room' : 'rooms'}
@@ -569,11 +569,11 @@ export const FrontDeskPanel: React.FC<FrontDeskPanelProps> = ({
       {walkInOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setWalkInOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-md glass-modal rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
               <h3 className="font-display text-base font-semibold text-slate-900">
                 New Walk-In Booking
               </h3>

@@ -121,12 +121,12 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 bg-white border border-slate-200 rounded-lg animate-pulse" />
+            <div key={i} className="h-28 surface-card rounded-2xl animate-pulse" />
           ))}
         </div>
         <div className="grid lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 h-80 bg-white border border-slate-200 rounded-lg animate-pulse" />
-          <div className="lg:col-span-5 h-80 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="lg:col-span-7 h-80 surface-card rounded-2xl animate-pulse" />
+          <div className="lg:col-span-5 h-80 surface-card rounded-2xl animate-pulse" />
         </div>
       </div>
     );
@@ -137,15 +137,15 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       {/* Section Header & Timeframe Segmented Control */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-lg font-semibold text-slate-900">
+          <h2 className="font-display text-xl font-bold text-stone-950 tracking-tight">
             Performance Analytics
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-stone-500 mt-1">
             Live aggregated metrics for {shop.name} updated automatically as orders arrive.
           </p>
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg self-start sm:self-auto">
+        <div className="flex items-center gap-1 p-1 glass-segmented rounded-2xl self-start sm:self-auto">
           {(
             [
               { id: 'today', label: 'Today' },
@@ -158,10 +158,10 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
               key={tf.id}
               type="button"
               onClick={() => setTimeframe(tf.id)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 timeframe === tf.id
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-stone-950 shadow-xs font-semibold'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               {tf.label}
@@ -172,52 +172,52 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
 
       {/* 4-Column KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Total Orders Processed</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-slate-900 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Total Orders Processed</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-stone-950 tabular-nums">
             {kpis.totalOrders}
           </p>
-          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+          <p className="mt-2.5 text-xs text-stone-500 tabular-nums">
             {kpis.paidCount} paid · {kpis.completedCount} served or paid
           </p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Total Revenue Generated</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-slate-900 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Total Revenue Generated</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-stone-950 tabular-nums">
             {formatCurrency(kpis.totalRevenue)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Gross order value</p>
+          <p className="mt-2.5 text-xs text-stone-500">Gross order value</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Average Order Value</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-slate-900 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Average Order Value</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-stone-950 tabular-nums">
             {formatCurrency(kpis.avgOrderValue)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Per ticket average</p>
+          <p className="mt-2.5 text-xs text-stone-500">Per ticket average</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Fulfillment Rate</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-emerald-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Fulfillment Rate</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-emerald-700 tabular-nums">
             {kpis.completionRate}%
           </p>
-          <p className="mt-1 text-xs text-slate-500">Orders served or settled</p>
+          <p className="mt-2.5 text-xs text-stone-500">Orders served or settled</p>
         </div>
       </div>
 
       {filteredOrders.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-lg px-6 py-16 text-center max-w-full">
-          <BarChart3 className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-900">
+        <div className="surface-card rounded-2xl px-6 py-16 text-center max-w-full">
+          <BarChart3 className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-stone-900">
             No order data in this timeframe yet
           </h3>
-          <p className="mt-1.5 text-sm text-slate-600 max-w-md mx-auto">
+          <p className="mt-1.5 text-sm text-stone-600 max-w-md mx-auto">
             Revenue trends and Top 5 ordered menu items populate automatically as soon as guests or
             servers submit orders for this shop.
           </p>
           <button
             type="button"
             onClick={onOpenStorefront}
-            className="mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#111315] rounded-xl hover:bg-stone-800 transition-colors cursor-pointer"
           >
             Open Public Storefront
             <ExternalLink className="w-3.5 h-3.5" />
@@ -226,17 +226,17 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       ) : (
         <div className="grid lg:grid-cols-12 gap-6">
           {/* Revenue Trend Chart */}
-          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-lg p-6">
+          <div className="lg:col-span-7 surface-card rounded-2xl p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="font-display text-sm font-semibold text-slate-900">
+                <h3 className="font-display text-[15px] font-semibold text-stone-950">
                   Revenue Trend
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Gross revenue aggregated by {timeframe === 'today' ? 'hour' : 'day'}
                 </p>
               </div>
-              <span className="font-mono text-xs text-slate-500 tabular-nums">
+              <span className="font-mono text-xs text-stone-500 tabular-nums">
                 {revenueTrend.length} {revenueTrend.length === 1 ? 'interval' : 'intervals'}
               </span>
             </div>
@@ -246,19 +246,19 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                 <AreaChart data={revenueTrend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="shopRevenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={accent} stopOpacity={0.22} />
+                      <stop offset="5%" stopColor={accent} stopOpacity={0.24} />
                       <stop offset="95%" stopColor={accent} stopOpacity={0.01} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E7E5E0" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: '#64748B' }}
-                    axisLine={{ stroke: '#E2E8F0' }}
+                    tick={{ fontSize: 11, fill: '#78716C' }}
+                    axisLine={{ stroke: '#E7E5E0' }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    tick={{ fontSize: 11, fill: '#78716C' }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => `₹${v}`}
@@ -267,9 +267,11 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                   <Tooltip
                     formatter={(value: unknown) => [formatCurrency(Number(value) || 0), 'Revenue']}
                     contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '8px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                      backdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(214, 211, 205, 0.85)',
+                      borderRadius: '14px',
+                      boxShadow: '0 12px 28px -8px rgba(17,19,21,0.16)',
                       fontSize: '12px',
                     }}
                   />
@@ -277,7 +279,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                     type="monotone"
                     dataKey="revenue"
                     stroke={accent}
-                    strokeWidth={2}
+                    strokeWidth={2.25}
                     fillOpacity={1}
                     fill="url(#shopRevenueGradient)"
                   />
@@ -287,12 +289,12 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           </div>
 
           {/* Top 5 Most Frequently Ordered Items */}
-          <div className="lg:col-span-5 bg-white border border-slate-200 rounded-lg p-6 flex flex-col">
+          <div className="lg:col-span-5 surface-card rounded-2xl p-6 flex flex-col">
             <div className="mb-5">
-              <h3 className="font-display text-sm font-semibold text-slate-900">
+              <h3 className="font-display text-[15px] font-semibold text-stone-950">
                 Top 5 Most Ordered Items
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-stone-500 mt-0.5">
                 Ranked by total unit volume across all orders
               </p>
             </div>
@@ -304,11 +306,11 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                   layout="vertical"
                   margin={{ top: 0, right: 16, left: 4, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E7E5E0" horizontal={false} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    tick={{ fontSize: 11, fill: '#78716C' }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -316,7 +318,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                     type="category"
                     dataKey="name"
                     width={118}
-                    tick={{ fontSize: 11, fill: '#334155' }}
+                    tick={{ fontSize: 11, fill: '#44403C' }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(val: string) =>
@@ -327,27 +329,28 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                     formatter={(value: unknown) => [`${value} units`, 'Ordered']}
                     contentStyle={{
                       backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '8px',
+                      border: '1px solid #E7E5E0',
+                      borderRadius: '10px',
+                      boxShadow: '0 8px 24px -6px rgba(17,19,21,0.12)',
                       fontSize: '12px',
                     }}
                   />
-                  <Bar dataKey="quantity" fill={accent} radius={[0, 4, 4, 0]} barSize={20} />
+                  <Bar dataKey="quantity" fill={accent} radius={[0, 6, 6, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             {/* Companion Tabular Summary */}
-            <div className="mt-4 pt-4 border-t border-slate-200 divide-y divide-slate-100">
+            <div className="mt-4 pt-4 border-t border-stone-200 divide-y divide-stone-100">
               {topItems.map((item, idx) => (
-                <div key={item.name} className="py-2 flex items-center justify-between gap-3 text-xs">
+                <div key={item.name} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="font-mono text-slate-400 tabular-nums w-4">0{idx + 1}</span>
-                    <span className="font-medium text-slate-800 truncate">{item.name}</span>
+                    <span className="font-mono text-stone-400 tabular-nums w-4">0{idx + 1}</span>
+                    <span className="font-medium text-stone-800 truncate">{item.name}</span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
-                    <span className="text-slate-600">{item.quantity} sold</span>
-                    <span className="text-slate-900 font-medium w-16 text-right">
+                    <span className="text-stone-500">{item.quantity} sold</span>
+                    <span className="text-stone-950 font-semibold w-16 text-right">
                       {formatCurrency(item.revenue)}
                     </span>
                   </div>

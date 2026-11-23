@@ -44,30 +44,36 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="pointer-events-auto bg-white border border-slate-200 rounded-lg shadow-md px-4 py-3 flex items-start gap-3 transition-all duration-150"
+            className="animate-toast-in pointer-events-auto bg-white/85 backdrop-blur-xl border border-white/90 ring-1 ring-stone-900/[0.07] rounded-2xl shadow-[0_16px_40px_-10px_rgba(17,19,21,0.18),inset_0_1px_0_rgba(255,255,255,0.95)] px-4 py-3.5 flex items-start gap-3"
           >
             {toast.variant === 'success' && (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
             )}
             {toast.variant === 'info' && (
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Info className="w-4 h-4" />
+              </div>
             )}
             {toast.variant === 'error' && (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="w-6 h-6 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertCircle className="w-4 h-4" />
+              </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900 leading-snug">{toast.title}</p>
+              <p className="text-sm font-semibold text-stone-900 leading-snug">{toast.title}</p>
               {toast.description && (
-                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{toast.description}</p>
+                <p className="text-xs text-stone-600 mt-0.5 leading-relaxed">{toast.description}</p>
               )}
             </div>
             <button
               type="button"
               onClick={() => dismiss(toast.id)}
               aria-label="Dismiss notification"
-              className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors shrink-0"
+              className="text-stone-400 hover:text-stone-700 p-1 rounded-md hover:bg-stone-100 transition-colors shrink-0 cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         ))}

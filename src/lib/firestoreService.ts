@@ -18,8 +18,13 @@ import {
 import { db, handleFirestoreError } from './firebase';
 import {
   BookingStatus,
-  DEFAULT_DISH_IMAGE,
   DEFAULT_SUITE_IMAGE,
+  DISH_IMAGE_AVOCADO_TARTINE,
+  DISH_IMAGE_CARDAMOM_BUN,
+  DISH_IMAGE_FILTER_KAAPI,
+  DISH_IMAGE_KOKUM_COOLER,
+  DISH_IMAGE_MASALA_CHAI,
+  DISH_IMAGE_PANEER_MELT,
   MenuItem,
   OperationType,
   Order,
@@ -413,6 +418,90 @@ export async function updateShopBranding(
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `shops/${shop.id}`);
+  }
+}
+
+export interface UpdateShopAdminInput {
+  name: string;
+  type: ShopType;
+  logo_url: string;
+  primary_color: string;
+  description: string;
+  modules: ShopModules;
+  owner_email: string;
+}
+
+export async function updateShopBySuperAdmin(
+  shop: Shop,
+  input: UpdateShopAdminInput
+): Promise<void> {
+  const name = clampString(input.name, 100);
+  const logoUrl = input.logo_url.trim();
+  const primaryColor = input.primary_color.trim();
+  const description = clampString(input.description || '', 400);
+  const ownerEmail = input.owner_email.trim().toLowerCase();
+
+  if (!name) throw new Error('Shop name is required.');
+  if (!isValidEmail(ownerEmail)) throw new Error('Please enter a valid owner email address.');
+  if (!isValidHexColor(primaryColor)) {
+    throw new Error('Primary color must be a valid hex value (e.g. #2563EB).');
+  }
+  if (!isSafeMediaUrl(logoUrl)) throw new Error('Logo URL must start with https:// or http://.');
+
+  const cleanModules: ShopModules = {
+    menu: Boolean(input.modules.menu),
+    orders: Boolean(input.modules.orders),
+    rooms: Boolean(input.modules.rooms),
+  };
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'shops', shop.id), {
+    name,
+    type: input.type,
+    logo_url: logoUrl,
+    primary_color: primaryColor,
+    description,
+    modules: cleanModules,
+    owner_email: ownerEmail,
+    updated_at: serverTimestamp(),
+  });
+  batch.update(doc(db, 'shop_slugs', shop.slug), {
+    name,
+    type: input.type,
+    logo_url: logoUrl,
+    primary_color: primaryColor,
+    description,
+    modules: cleanModules,
+    updated_at: serverTimestamp(),
+  });
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `shops/${shop.id}`);
+  }
+}
+
+export async function deleteShopBySuperAdmin(shop: Shop): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'shops', shop.id));
+  batch.delete(doc(db, 'shop_slugs', shop.slug));
+
+  try {
+    const invitesSnap = await getDocs(
+      query(collection(db, 'staff_invites'), where('shop_id', '==', shop.id))
+    );
+    invitesSnap.docs.forEach((inviteDoc) => {
+      batch.delete(inviteDoc.ref);
+    });
+  } catch {
+    // Proceed with shop and slug removal even if invite lookup fails
+  }
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `shops/${shop.id}`);
   }
 }
 
@@ -1618,7 +1707,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
     slug,
     type: 'both',
     logo_url: '',
-    primary_color: '#1D4ED8',
+    primary_color: '#B45309',
     description:
       'Specialty South Indian filter coffee bar, artisanal bistro kitchen, and sunlit boutique suites.',
     modules: { menu: true, orders: true, rooms: true },
@@ -1632,7 +1721,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Chai & Coffee',
       description: 'Slow-dripped estate Arabica roast frothed in traditional brass davara.',
       price: 140,
-      image_url: DEFAULT_DISH_IMAGE,
+      image_url: DISH_IMAGE_FILTER_KAAPI,
       is_available: true,
       stock_count: 28,
       low_stock_threshold: 8,
@@ -1642,7 +1731,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Chai & Coffee',
       description: 'Assam CTC brewed with crushed ginger, green cardamom, and whole milk.',
       price: 110,
-      image_url: '',
+      image_url: DISH_IMAGE_MASALA_CHAI,
       is_available: true,
       stock_count: null,
       low_stock_threshold: 5,
@@ -1652,7 +1741,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Kitchen',
       description: 'Char-grilled malai paneer, mint chutney, and aged cheddar on toasted levain.',
       price: 320,
-      image_url: DEFAULT_DISH_IMAGE,
+      image_url: DISH_IMAGE_PANEER_MELT,
       is_available: true,
       stock_count: 14,
       low_stock_threshold: 5,
@@ -1662,9 +1751,9 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Kitchen',
       description: 'Country sourdough, smashed avocado, roasted milagai podi, and toasted sesame.',
       price: 340,
-      image_url: '',
+      image_url: DISH_IMAGE_AVOCADO_TARTINE,
       is_available: true,
-      stock_count: 3,
+      stock_count: 10,
       low_stock_threshold: 5,
     },
     {
@@ -1672,9 +1761,9 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Bakery',
       description: 'Warm laminated brioche spiral glazed with organic palm jaggery and elaichi.',
       price: 160,
-      image_url: '',
-      is_available: false,
-      stock_count: 0,
+      image_url: DISH_IMAGE_CARDAMOM_BUN,
+      is_available: true,
+      stock_count: 12,
       low_stock_threshold: 6,
     },
     {
@@ -1682,7 +1771,7 @@ export async function seedSampleVenue(ownerEmail: string): Promise<string> {
       category: 'Cold Bar',
       description: 'Konkan kokum reduction layered with sparkling botanical tonic and fresh mint.',
       price: 190,
-      image_url: '',
+      image_url: DISH_IMAGE_KOKUM_COOLER,
       is_available: true,
       stock_count: 18,
       low_stock_threshold: 5,

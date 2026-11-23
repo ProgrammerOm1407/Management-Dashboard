@@ -55,10 +55,10 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-lg font-semibold text-slate-900">Staff Management</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
+        <h2 className="font-display text-lg font-semibold text-stone-950 tracking-tight">Staff Management</h2>
+        <p className="text-xs text-stone-500 mt-0.5">
           Add floor and kitchen Server accounts linked exclusively to{' '}
-          <span className="font-mono text-slate-700">{shop.name}</span>.
+          <span className="font-mono text-stone-700">{shop.name}</span>.
         </p>
       </div>
 
@@ -66,11 +66,11 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
         {/* Invite Server Form */}
         <form
           onSubmit={(e) => void handleInvite(e)}
-          className="lg:col-span-4 bg-white border border-slate-200 rounded-lg p-6 space-y-4"
+          className="lg:col-span-4 surface-card rounded-2xl p-6 space-y-4"
         >
           <div className="flex items-center gap-2.5">
-            <UserPlus className="w-4 h-4 text-slate-600" />
-            <h3 className="font-display text-sm font-semibold text-slate-900">
+            <UserPlus className="w-4 h-4 text-stone-600" />
+            <h3 className="font-display text-sm font-semibold text-stone-950">
               Add Server Account
             </h3>
           </div>
@@ -94,7 +94,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Alex Rivera"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+              className="w-full px-3 py-2 text-sm bg-white/75 border border-stone-200/90 rounded-xl focus:bg-white focus:border-stone-900 focus:outline-none transition-colors"
             />
           </div>
 
@@ -109,7 +109,7 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="server@business.com"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+              className="w-full px-3 py-2 text-sm bg-white/75 border border-stone-200/90 rounded-xl focus:bg-white focus:border-stone-900 focus:outline-none transition-colors"
             />
           </div>
 
@@ -124,10 +124,10 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
         </form>
 
         {/* Team Roster Table */}
-        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="font-display text-sm font-semibold text-slate-900">Shop Roster</h3>
-            <span className="font-mono text-xs text-slate-500 tabular-nums">
+        <div className="lg:col-span-8 surface-card rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
+            <h3 className="font-display text-sm font-semibold text-stone-950">Shop Roster</h3>
+            <span className="font-mono text-xs text-stone-500 tabular-nums">
               {staff.length} {staff.length === 1 ? 'member' : 'members'}
             </span>
           </div>
@@ -135,14 +135,14 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
           {loading ? (
             <div className="p-6 space-y-3">
               {[1, 2].map((n) => (
-                <div key={n} className="h-12 bg-slate-100 rounded animate-pulse" />
+                <div key={n} className="h-12 bg-stone-100 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : staff.length === 0 ? (
             <div className="px-6 py-12 text-center">
-              <Users className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-medium text-slate-900">No staff invitations recorded yet</p>
-              <p className="text-xs text-slate-500 mt-1">
+              <Users className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-stone-950">No staff invitations recorded yet</p>
+              <p className="text-xs text-stone-500 mt-1">
                 Add your first server using the form to link their Google account to this shop.
               </p>
             </div>
@@ -150,16 +150,16 @@ export const StaffManager: React.FC<StaffManagerProps> = ({ shop, staff, loading
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-500">
+                  <tr className="border-b border-stone-200/75 bg-stone-100/50 text-xs font-medium text-stone-500">
                     <th className="py-3 px-6">Member</th>
                     <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-6 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-sm">
+                <tbody className="divide-y divide-stone-100 text-sm">
                   {staff.map((member) => (
-                    <tr key={member.id} className="hover:bg-slate-50/70">
+                    <tr key={member.id} className="hover:bg-stone-50/70 transition-colors">
                       <td className="py-3.5 px-6">
                         <p className="font-medium text-slate-900">{member.full_name}</p>
                         <p className="text-xs font-mono text-slate-500">{member.email}</p>

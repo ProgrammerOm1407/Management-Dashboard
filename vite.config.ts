@@ -3,9 +3,16 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
+function normalizeBasePath(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
+}
 
 function buildSpa404Html(normalizedBase: string): string {
   const pathSegmentsToKeep = normalizedBase.split('/').filter(Boolean).length;
@@ -41,9 +48,9 @@ function buildSpa404Html(normalizedBase: string): string {
 `;
 }
 
-export default defineConfig(() => {
-  const rawBase = (process.env.VITE_BASE_PATH || '/').trim() || '/';
-  const normalizedBase = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+export default defineConfig(({mode}) => {
+  const env = loadEnv(mode, rootDir, '');
+  const normalizedBase = normalizeBasePath(process.env.VITE_BASE_PATH || env.VITE_BASE_PATH || '/');
   return {
     base: normalizedBase,
     plugins: [

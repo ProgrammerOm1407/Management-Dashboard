@@ -23,12 +23,16 @@
             })
             .join('?');
           var basePath = l.pathname.endsWith('/') ? l.pathname.slice(0, -1) : l.pathname;
-          window.history.replaceState(null, '', basePath + decoded + l.hash);
+          if (l.hostname === 'github.io' || l.hostname.endsWith('.github.io')) {
+            window.history.replaceState(null, '', basePath + '/#' + decoded);
+          } else {
+            window.history.replaceState(null, '', basePath + decoded + l.hash);
+          }
         }
       })(window.location);
     </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900">
+  <body class="text-[#141619] antialiased selection:bg-stone-900 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

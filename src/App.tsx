@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -9,6 +9,7 @@ import { OwnerDashboardPage } from './pages/OwnerDashboardPage';
 import { ServerPage } from './pages/ServerPage';
 import { PublicStorefrontPage } from './pages/PublicStorefrontPage';
 import { UserRole } from './types';
+import { isGitHubPagesEnvironment, resolveRouterBasename } from './lib/routing';
 
 function getHomePathForRole(role: UserRole): string {
   switch (role) {
@@ -61,13 +62,19 @@ const RootRedirect: React.FC = () => {
   return <Navigate to={getHomePathForRole(profile.role)} replace />;
 };
 
+const AppRouter: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (isGitHubPagesEnvironment()) {
+    return <HashRouter>{children}</HashRouter>;
+  }
+  return <BrowserRouter basename={resolveRouterBasename()}>{children}</BrowserRouter>;
+};
+
 export default function App() {
-  const routerBasename = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
   return (
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter basename={routerBasename}>
+          <AppRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route
@@ -106,7 +113,7 @@ export default function App() {
               <Route path="/" element={<RootRedirect />} />
               <Route path="*" element={<RootRedirect />} />
             </Routes>
-          </BrowserRouter>
+          </AppRouter>
         </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>

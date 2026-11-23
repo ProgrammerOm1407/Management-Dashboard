@@ -64,6 +64,8 @@ import {
   validateTableOrRoom,
 } from '../lib/validation';
 import {
+  DEFAULT_HERO_IMAGE,
+  DEFAULT_SUITE_IMAGE,
   MenuItem,
   Order,
   ORDER_STATUS_FLOW,
@@ -77,7 +79,7 @@ import {
   ShopCustomer,
   ShopSlugRecord,
 } from '../types';
-import { SafeImage } from '../components/SafeImage';
+import { resolveDishImage, SafeImage } from '../components/SafeImage';
 import { UpiPaymentBox } from '../components/UpiPaymentBox';
 import { CustomerAccountDrawer } from '../components/CustomerAccountDrawer';
 import { useAuth } from '../context/AuthContext';
@@ -95,15 +97,54 @@ import {
   writeStorefrontState,
 } from '../lib/storefrontStorage';
 
-function normalizeTableParam(raw: string): string {
-  const trimmed = raw.trim().slice(0, 60);
+function formatDisplayTableLabel(raw?: string | null): string {
+  const trimmed = (raw || '').trim().slice(0, 60);
   if (!trimmed) return '';
-  return /^\d+$/.test(trimmed) ? `Table ${trimmed}` : trimmed;
+  const check = validateTableOrRoom(trimmed);
+  return check.valid ? check.value : '';
+}
+
+function normalizeTableParam(raw: string): string {
+  return formatDisplayTableLabel(raw);
 }
 
 function normalizeMatchKey(val: string): string {
   return val.trim().replace(/\s+/g, ' ').toLowerCase();
 }
+
+const NON_VEG_DISH_PATTERN =
+  /\b(chicken|mutton|lamb|egg|eggs|omelette|fish|prawn|prawns|shrimp|salmon|tuna|crab|bacon|pork|beef|keema|turkey|duck|non[-\s]?veg|meatball|pepperoni|salami)\b/i;
+
+const BESTSELLER_DISH_PATTERN = /filter\s*kaapi|paneer\s*tikka|sourdough\s*melt/i;
+
+function isNonVegDish(item: MenuItem): boolean {
+  return NON_VEG_DISH_PATTERN.test(`${item.name} ${item.description || ''}`);
+}
+
+function isBestsellerDish(item: MenuItem): boolean {
+  return BESTSELLER_DISH_PATTERN.test(item.name);
+}
+
+const DietaryIndicator: React.FC<{ isNonVeg: boolean }> = ({ isNonVeg }) =>
+  isNonVeg ? (
+    <span
+      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-[3px] border-[1.5px] border-red-700 bg-white shrink-0 mt-[3px]"
+      title="Non-Vegetarian"
+      aria-label="Non-Vegetarian"
+    >
+      <svg viewBox="0 0 8 8" className="w-2 h-2 fill-red-700" aria-hidden="true">
+        <polygon points="4,1 7.2,6.8 0.8,6.8" />
+      </svg>
+    </span>
+  ) : (
+    <span
+      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-[3px] border-[1.5px] border-emerald-700 bg-white shrink-0 mt-[3px]"
+      title="Vegetarian"
+      aria-label="Vegetarian"
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-700" />
+    </span>
+  );
 
 const TRACKER_STEPS: {
   status: OrderStatus;
@@ -307,11 +348,11 @@ export const PublicStorefrontPage: React.FC = () => {
               ) || null
             : null;
 
-          // Resolve table context: explicit ?table= URL overrides persisted value
+          // Resolve table context: explicit ?table= URL overrides persisted value (discard invalid stray values)
           const resolvedTable =
-            scannedTable ||
-            savedState?.tableOrRoom ||
-            savedSessions[0]?.tableOrRoom ||
+            formatDisplayTableLabel(scannedTable) ||
+            formatDisplayTableLabel(savedState?.tableOrRoom) ||
+            formatDisplayTableLabel(savedSessions[0]?.tableOrRoom) ||
             '';
           setTableOrRoom(resolvedTable);
 
@@ -1253,102 +1294,105 @@ export const PublicStorefrontPage: React.FC = () => {
     );
   }
 
-  const accent = shop.primary_color || '#2563EB';
+  const isLegacyBlue =
+    !shop.primary_color ||
+    ['#2563EB', '#1D4ED8', '#3B82F6'].includes(shop.primary_color.trim().toUpperCase());
+  const accent = isLegacyBlue ? '#B45309' : shop.primary_color;
+  const primaryButtonColor = '#1C1917';
   const canOrder = shop.modules.menu && shop.modules.orders;
   const hasBothMenuAndRooms = shop.modules.menu && shop.modules.rooms;
+  const displayTableLabel = formatDisplayTableLabel(tableOrRoom);
+  const liveTrackerTableLabel = formatDisplayTableLabel(liveTracker?.table_or_room);
   const activeStepIndex = liveTracker ? ORDER_STATUS_FLOW.indexOf(liveTracker.status) : 0;
   const activeStepMeta =
     TRACKER_STEPS[Math.max(0, Math.min(TRACKER_STEPS.length - 1, activeStepIndex))];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Accent Top Hairline */}
-      <div className="h-1.5 w-full" style={{ backgroundColor: accent }} />
+    <div className="min-h-screen flex flex-col bg-[#FAFAF9] text-[#1C1917]">
+      {/* Warm Hospitality Accent Hairline */}
+      <div className="h-[3px] w-full" style={{ backgroundColor: accent }} />
 
-      {/* Clean 3-Zone Top Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 sm:gap-6">
+      {/* Minimal Boutique Top Navbar */}
+      <header className="sticky top-0 z-20 bg-[#FAFAF9]/90 backdrop-blur-xl border-b border-stone-200/80">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {shop.logo_url ? (
               <SafeImage
                 src={shop.logo_url}
                 alt={shop.name}
                 accentColor={accent}
-                className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                className="w-9 h-9 rounded-xl object-cover border border-stone-200 shrink-0 shadow-2xs"
               />
             ) : (
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-display font-bold text-base shrink-0"
-                style={{ backgroundColor: accent }}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-display font-bold text-base shrink-0 shadow-xs"
+                style={{ backgroundColor: primaryButtonColor }}
               >
                 {shop.name.slice(0, 1).toUpperCase()}
               </div>
             )}
-            <span className="font-display font-bold text-base sm:text-lg text-slate-900 truncate">
+            <span className="font-display font-bold text-base sm:text-lg text-[#1C1917] tracking-tight truncate">
               {shop.name}
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-            {shop.modules.menu && (
+          {hasBothMenuAndRooms && (
+            <nav
+              aria-label="Storefront sections"
+              className="hidden md:flex items-center gap-1 p-1 rounded-full bg-stone-200/65 border border-stone-200/80"
+            >
               <button
                 type="button"
                 onClick={() => {
                   setTrackerViewOpen(false);
                   setActiveSection('menu');
                 }}
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                   activeSection === 'menu' && !trackerViewOpen
-                    ? 'text-slate-900 font-semibold'
-                    : 'hover:text-slate-900'
+                    ? 'bg-white text-[#1C1917] shadow-xs'
+                    : 'text-stone-600 hover:text-[#1C1917]'
                 }`}
               >
+                <UtensilsCrossed className="w-3.5 h-3.5" style={activeSection === 'menu' && !trackerViewOpen ? { color: accent } : undefined} />
                 Food Menu
               </button>
-            )}
-            {shop.modules.rooms && (
               <button
                 type="button"
                 onClick={() => {
                   setTrackerViewOpen(false);
                   setActiveSection('rooms');
                 }}
-                className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                   activeSection === 'rooms' && !trackerViewOpen
-                    ? 'text-slate-900 font-semibold'
-                    : 'hover:text-slate-900'
+                    ? 'bg-white text-[#1C1917] shadow-xs'
+                    : 'text-stone-600 hover:text-[#1C1917]'
                 }`}
               >
+                <BedDouble className="w-3.5 h-3.5" style={activeSection === 'rooms' && !trackerViewOpen ? { color: accent } : undefined} />
                 Book a Room
               </button>
-            )}
-            <Link
-              to="/login"
-              className="hover:text-slate-900 whitespace-nowrap shrink-0"
-            >
-              Staff Login
-            </Link>
-          </nav>
+            </nav>
+          )}
 
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setAccountDrawerOpen(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-full border whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
                 customerProfile
-                  ? 'bg-slate-50 border-slate-300 text-slate-900 hover:bg-slate-100'
+                  ? 'bg-white border-stone-200 text-[#1C1917] hover:bg-stone-100'
                   : user && user.emailVerified
                     ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100/70'
-                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    : 'bg-white border-stone-200/90 text-stone-700 hover:bg-stone-100'
               }`}
             >
               {customerProfile ? (
                 <>
-                  <Award className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="max-w-[90px] truncate">
+                  <Award className="w-3.5 h-3.5 shrink-0" style={{ color: accent }} />
+                  <span className="max-w-[88px] truncate">
                     {customerProfile.full_name.split(' ')[0]}
                   </span>
-                  <span className="hidden sm:inline font-mono text-[11px] text-slate-500 tabular-nums">
+                  <span className="hidden sm:inline font-mono text-[11px] text-stone-500 tabular-nums">
                     · {customerProfile.reward_points || 0} pts
                   </span>
                 </>
@@ -1360,34 +1404,70 @@ export const PublicStorefrontPage: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <UserCheck className="w-3.5 h-3.5 shrink-0 text-stone-500" />
                   <span className="hidden sm:inline">Member Login</span>
                   <span className="sm:hidden">Login</span>
                 </>
               )}
             </button>
 
-            {canOrder ? (
+            {canOrder && (
               <button
                 type="button"
                 onClick={openOrderTray}
-                className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap shrink-0 cursor-pointer"
-                style={{ backgroundColor: accent }}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] rounded-full shadow-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <ShoppingBag className="w-4 h-4" />
+                <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
                 <span>Order</span>
-                <span className="font-mono tabular-nums">({cartCount})</span>
+                <span
+                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-full ${
+                    cartCount > 0 ? 'bg-amber-600 text-white' : 'bg-white/15 text-stone-200'
+                  }`}
+                >
+                  {cartCount}
+                </span>
               </button>
-            ) : (
-              <Link
-                to="/login"
-                className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0"
-              >
-                Staff Login
-              </Link>
             )}
           </div>
         </div>
+
+        {/* Clean Mobile Section Tabs when both Food Menu & Book a Room are enabled */}
+        {hasBothMenuAndRooms && (
+          <div className="md:hidden border-t border-stone-200/70 bg-[#FAFAF9]/95 px-4 py-2">
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-stone-200/65 border border-stone-200/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setTrackerViewOpen(false);
+                  setActiveSection('menu');
+                }}
+                className={`inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                  activeSection === 'menu' && !trackerViewOpen
+                    ? 'bg-white text-[#1C1917] shadow-xs'
+                    : 'text-stone-600'
+                }`}
+              >
+                <UtensilsCrossed className="w-3.5 h-3.5" style={activeSection === 'menu' && !trackerViewOpen ? { color: accent } : undefined} />
+                Food Menu
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTrackerViewOpen(false);
+                  setActiveSection('rooms');
+                }}
+                className={`inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                  activeSection === 'rooms' && !trackerViewOpen
+                    ? 'bg-white text-[#1C1917] shadow-xs'
+                    : 'text-stone-600'
+                }`}
+              >
+                <BedDouble className="w-3.5 h-3.5" style={activeSection === 'rooms' && !trackerViewOpen ? { color: accent } : undefined} />
+                Book a Room
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Active Live Order Banner when browsing menu */}
@@ -1402,7 +1482,7 @@ export const PublicStorefrontPage: React.FC = () => {
           bannerPayStatus !== 'verification_pending';
 
         return (
-          <div className={isUnpaidServed ? 'bg-amber-950 text-amber-50' : 'bg-slate-900 text-white'}>
+          <div className={isUnpaidServed ? 'bg-amber-950 text-amber-50' : 'bg-[#1C1917] text-white'}>
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span
@@ -1411,8 +1491,9 @@ export const PublicStorefrontPage: React.FC = () => {
                   }`}
                 />
                 <span className="font-mono font-semibold shrink-0">{liveTracker.order_number}</span>
-                <span className={isUnpaidServed ? 'text-amber-100 truncate' : 'text-slate-300 truncate'}>
-                  {liveTracker.table_or_room} · {formatCurrency(liveTracker.total_amount)} ·{' '}
+                <span className={isUnpaidServed ? 'text-amber-100 truncate' : 'text-stone-300 truncate'}>
+                  {liveTrackerTableLabel ? `${liveTrackerTableLabel} · ` : ''}
+                  {formatCurrency(liveTracker.total_amount)} ·{' '}
                   <strong className="text-white">
                     {isUnpaidServed ? 'Served · Please pay before leaving' : activeStepMeta.label}
                   </strong>
@@ -1425,7 +1506,7 @@ export const PublicStorefrontPage: React.FC = () => {
                     setPayNowOpen(false);
                     setTrackerViewOpen(true);
                   }}
-                  className="inline-flex items-center gap-1 font-medium text-slate-200 hover:text-white whitespace-nowrap cursor-pointer"
+                  className="inline-flex items-center gap-1 font-medium text-stone-200 hover:text-white whitespace-nowrap cursor-pointer"
                 >
                   Track Live
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1439,7 +1520,7 @@ export const PublicStorefrontPage: React.FC = () => {
                       setPayNowOpen(true);
                       setTrackerViewOpen(true);
                     }}
-                    className="px-3 py-1.5 text-xs font-semibold text-white rounded-md hover:opacity-95 whitespace-nowrap cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 whitespace-nowrap cursor-pointer"
                     style={{ backgroundColor: isUnpaidServed ? '#D97706' : accent }}
                   >
                     Pay Now
@@ -1451,74 +1532,53 @@ export const PublicStorefrontPage: React.FC = () => {
         );
       })()}
 
-      {/* Storefront Intro & Dual-Module Mode Switch */}
+      {/* Editorial Storefront Hero */}
       {!trackerViewOpen && (
-        <section className="bg-white border-b border-slate-200">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9 flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <p className="text-xs font-medium text-slate-500">
+        <section className="relative overflow-hidden bg-[#1C1917] border-b border-stone-200/80">
+          <SafeImage
+            src={shop.type === 'hotel' ? DEFAULT_SUITE_IMAGE : DEFAULT_HERO_IMAGE}
+            alt={`${shop.name} hospitality ambiance`}
+            accentColor={accent}
+            className="absolute inset-0 w-full h-full object-cover opacity-80"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#1C1917]/92 via-[#1C1917]/50 to-[#1C1917]/20" />
+
+          <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-9 sm:pt-16 sm:pb-11">
+            <div className="max-w-2xl">
+              <p className="text-xs font-medium text-amber-200/90 tracking-wide">
                 {getShopTypeLabel(shop.type)} · Open for guests
                 {canOrder ? ' · Live ordering' : ''}
                 {shop.modules.rooms ? ' · Instant room requests' : ''}
-                {tableOrRoom.trim() ? ` · ${tableOrRoom.trim()}` : ''}
+                {displayTableLabel ? ` · ${displayTableLabel}` : ''}
               </p>
-              <h1 className="mt-2 font-display text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
                 {shop.name}
               </h1>
               {shop.description && (
-                <p className="mt-2 text-sm sm:text-base text-slate-600 max-w-2xl leading-relaxed">
+                <p className="mt-2.5 text-sm sm:text-[15px] text-stone-200/90 max-w-xl leading-relaxed">
                   {shop.description}
                 </p>
               )}
             </div>
-
-            {hasBothMenuAndRooms && (
-              <div className="inline-flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg self-start md:self-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('menu')}
-                  className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                    activeSection === 'menu'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <UtensilsCrossed className="w-3.5 h-3.5" />
-                  Food Menu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('rooms')}
-                  className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                    activeSection === 'rooms'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <BedDouble className="w-3.5 h-3.5" />
-                  Book a Room
-                </button>
-              </div>
-            )}
           </div>
         </section>
       )}
 
       {/* Main Guest Content */}
       <main
-        className={`flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 ${
-          canOrder && cartCount > 0 && !trackerViewOpen && activeSection === 'menu' ? 'pb-28' : ''
+        className={`flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8 ${
+          canOrder && cartCount > 0 && !trackerViewOpen ? 'pb-28' : ''
         }`}
       >
         {/* Live Real-Time Order Tracker View */}
         {trackerViewOpen && liveTracker ? (
           <div className="max-w-2xl mx-auto space-y-6">
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="p-6 sm:p-7 border-b border-slate-200">
+            <div className="bg-white border border-stone-200/80 shadow-xs rounded-2xl overflow-hidden">
+              <div className="p-6 sm:p-7 border-b border-stone-200/75">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-sm font-semibold text-slate-900 tabular-nums">
+                      <span className="font-mono text-sm font-semibold text-[#1C1917] tabular-nums">
                         {liveTracker.order_number}
                       </span>
                       {liveTracker.status === 'cancelled' ? (
@@ -1533,8 +1593,9 @@ export const PublicStorefrontPage: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {shop.name} · {liveTracker.table_or_room}
+                    <p className="text-xs text-stone-500 mt-1">
+                      {shop.name}
+                      {liveTrackerTableLabel ? ` · ${liveTrackerTableLabel}` : ''}
                     </p>
                   </div>
                   <span
@@ -1586,41 +1647,55 @@ export const PublicStorefrontPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Live 5-Step Progress Stepper */}
-                    <div className="mt-6 pt-6 border-t border-slate-200">
-                      <ol className="grid grid-cols-5 gap-2">
-                        {TRACKER_STEPS.map((step, idx) => {
-                          const isDone = idx < activeStepIndex;
-                          const isCurrent = idx === activeStepIndex;
-                          return (
-                            <li key={step.status} className="flex flex-col items-center text-center">
-                              <div
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-semibold border transition-colors ${
-                                  isDone
-                                    ? 'bg-emerald-600 border-emerald-600 text-white'
-                                    : isCurrent
-                                      ? 'text-white border-transparent'
-                                      : 'bg-slate-50 border-slate-300 text-slate-400'
-                                }`}
-                                style={isCurrent ? { backgroundColor: accent } : undefined}
-                              >
-                                {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-                              </div>
-                              <span
-                                className={`mt-2 text-[11px] sm:text-xs font-medium leading-tight ${
-                                  isCurrent
-                                    ? 'text-slate-900 font-semibold'
-                                    : isDone
-                                      ? 'text-emerald-700'
-                                      : 'text-slate-400'
-                                }`}
-                              >
-                                {step.label}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ol>
+                    {/* Live 5-Step Progress Stepper with Connected Progress Rail */}
+                    <div className="mt-6 pt-6 border-t border-stone-200">
+                      <div className="relative">
+                        <div
+                          className="absolute top-3.5 left-[10%] right-[10%] h-0.5 bg-stone-200 rounded-full"
+                          aria-hidden="true"
+                        />
+                        <div
+                          className="absolute top-3.5 left-[10%] h-0.5 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${(Math.max(0, Math.min(4, activeStepIndex)) / 4) * 80}%`,
+                            backgroundColor: activeStepIndex >= 4 ? '#059669' : accent,
+                          }}
+                          aria-hidden="true"
+                        />
+                        <ol className="relative grid grid-cols-5 gap-2">
+                          {TRACKER_STEPS.map((step, idx) => {
+                            const isDone = idx < activeStepIndex;
+                            const isCurrent = idx === activeStepIndex;
+                            return (
+                              <li key={step.status} className="flex flex-col items-center text-center">
+                                <div
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-semibold border transition-colors ${
+                                    isDone
+                                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                                      : isCurrent
+                                        ? 'text-white border-transparent shadow-sm ring-4 ring-white'
+                                        : 'bg-white border-stone-300 text-stone-400'
+                                  }`}
+                                  style={isCurrent ? { backgroundColor: accent } : undefined}
+                                >
+                                  {isDone ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                                </div>
+                                <span
+                                  className={`mt-2 text-[11px] sm:text-xs font-medium leading-tight ${
+                                    isCurrent
+                                      ? 'text-stone-950 font-semibold'
+                                      : isDone
+                                        ? 'text-emerald-700'
+                                        : 'text-stone-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </div>
                     </div>
                   </>
                 )}
@@ -1795,7 +1870,7 @@ export const PublicStorefrontPage: React.FC = () => {
                       </div>
 
                       {settlementError && (
-                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 break-words">
                           {settlementError}
                         </div>
                       )}
@@ -2035,19 +2110,28 @@ export const PublicStorefrontPage: React.FC = () => {
             {/* FOOD MENU TAB */}
             {activeSection === 'menu' && shop.modules.menu && (
               <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <h2 className="font-display text-xl font-semibold text-slate-900">Food Menu</h2>
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-xl sm:text-2xl font-bold text-[#1C1917] tracking-tight">
+                      Food Menu
+                    </h2>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      {filteredMenu.length}{' '}
+                      {filteredMenu.length === 1 ? 'dish available' : 'dishes available'}
+                      {selectedCategory !== 'All' ? ` in ${selectedCategory}` : ''}
+                    </p>
+                  </div>
                   {categories.length > 1 && (
-                    <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg overflow-x-auto max-w-full">
+                    <div className="flex items-center gap-1.5 p-1 bg-stone-200/65 border border-stone-200/80 rounded-full overflow-x-auto max-w-full">
                       {categories.map((cat) => (
                         <button
                           key={cat}
                           type="button"
                           onClick={() => setSelectedCategory(cat)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                          className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
                             selectedCategory === cat
-                              ? 'bg-white text-slate-900 shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
+                              ? 'bg-[#1C1917] text-white shadow-xs font-semibold'
+                              : 'text-stone-600 hover:text-[#1C1917]'
                           }`}
                         >
                           {cat}
@@ -2058,86 +2142,109 @@ export const PublicStorefrontPage: React.FC = () => {
                 </div>
 
                 {filteredMenu.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-lg py-16 px-6 text-center">
-                    <UtensilsCrossed className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-900">Menu items coming soon</p>
-                    <p className="text-xs text-slate-500 mt-1">
+                  <div className="bg-white border border-stone-200/80 rounded-2xl py-16 px-6 text-center">
+                    <UtensilsCrossed className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-[#1C1917]">Menu items coming soon</p>
+                    <p className="text-xs text-stone-500 mt-1">
                       This venue has not published available menu offerings yet.
                     </p>
                   </div>
                 ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredMenu.map((item) => {
                       const qty = cart[item.id] || 0;
+                      const dishImage = resolveDishImage(item.name, item.image_url);
+                      const nonVeg = isNonVegDish(item);
+                      const bestseller = isBestsellerDish(item);
+
                       return (
                         <article
                           key={item.id}
-                          className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col"
+                          className={`group bg-white border rounded-2xl overflow-hidden flex flex-col transition-all duration-200 hover:shadow-[0_14px_32px_-12px_rgba(28,25,23,0.14)] hover:border-stone-300/90 ${
+                            qty > 0
+                              ? 'border-amber-700/35 ring-1 ring-amber-700/15 shadow-xs'
+                              : 'border-stone-200/85'
+                          }`}
                         >
-                          <SafeImage
-                            src={item.image_url}
-                            alt={item.name}
-                            fallbackIcon="menu"
-                            fallbackLabel={item.category}
-                            accentColor={accent}
-                            className="w-full h-44 object-cover border-b border-slate-100"
-                          />
-                          <div className="p-4 flex-1 flex flex-col justify-between gap-4">
+                          <div className="aspect-[4/3] w-full overflow-hidden bg-stone-100 border-b border-stone-100">
+                            <SafeImage
+                              src={dishImage}
+                              alt={item.name}
+                              fallbackIcon="menu"
+                              fallbackLabel={item.category}
+                              accentColor={accent}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                          <div className="p-5 flex-1 flex flex-col justify-between gap-4">
                             <div>
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-xs text-slate-500">{item.category}</p>
-                                  <h3 className="font-display text-base font-semibold text-slate-900 mt-0.5">
-                                    {item.name}
-                                  </h3>
-                                </div>
-                                <span className="font-mono text-sm font-semibold text-slate-900 tabular-nums shrink-0">
-                                  {formatCurrency(item.price)}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400 truncate">
+                                  {item.category}
                                 </span>
+                                {bestseller && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-[#B45309] border border-amber-200/80 whitespace-nowrap shrink-0">
+                                    Bestseller
+                                  </span>
+                                )}
                               </div>
+
+                              <div className="mt-1.5 flex items-start gap-2">
+                                <DietaryIndicator isNonVeg={nonVeg} />
+                                <h3 className="font-display text-[16px] font-semibold text-[#1C1917] leading-snug">
+                                  {item.name}
+                                </h3>
+                              </div>
+
                               {item.description && (
-                                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                                <p className="mt-1.5 text-xs text-stone-500 leading-relaxed line-clamp-2">
                                   {item.description}
                                 </p>
                               )}
                             </div>
 
-                            {canOrder && (
-                              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                                {qty === 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => updateCartQty(item.id, 1)}
-                                    className="w-full py-2 px-3 text-xs font-semibold text-white rounded-lg hover:opacity-95 transition-opacity cursor-pointer"
-                                    style={{ backgroundColor: accent }}
-                                  >
-                                    Add to Order
-                                  </button>
-                                ) : (
-                                  <div className="w-full flex items-center justify-between gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => updateCartQty(item.id, -1)}
-                                      aria-label={`Remove one ${item.name}`}
-                                      className="w-8 h-8 rounded-lg border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-50 cursor-pointer"
-                                    >
-                                      <Minus className="w-3.5 h-3.5" />
-                                    </button>
-                                    <span className="font-mono text-xs font-semibold text-slate-900 tabular-nums">
-                                      {qty} in order
-                                    </span>
+                            <div className="pt-3.5 border-t border-stone-100 flex items-center justify-between gap-3">
+                              <span className="font-mono text-[15px] font-semibold text-[#1C1917] tabular-nums">
+                                {formatCurrency(item.price)}
+                              </span>
+
+                              {canOrder && (
+                                <>
+                                  {qty === 0 ? (
                                     <button
                                       type="button"
                                       onClick={() => updateCartQty(item.id, 1)}
-                                      aria-label={`Add one ${item.name}`}
-                                      className="w-8 h-8 rounded-lg border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                      className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] active:scale-[0.98] rounded-lg shadow-2xs transition-all cursor-pointer"
                                     >
                                       <Plus className="w-3.5 h-3.5" />
+                                      <span>Add</span>
                                     </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                                  ) : (
+                                    <div className="inline-flex items-center bg-[#1C1917] text-white rounded-lg p-0.5 shadow-2xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => updateCartQty(item.id, -1)}
+                                        aria-label={`Remove one ${item.name}`}
+                                        className="w-7 h-7 rounded-md flex items-center justify-center text-stone-200 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+                                      >
+                                        <Minus className="w-3.5 h-3.5" />
+                                      </button>
+                                      <span className="w-7 text-center font-mono text-xs font-semibold tabular-nums">
+                                        {qty}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateCartQty(item.id, 1)}
+                                        aria-label={`Add one ${item.name}`}
+                                        className="w-7 h-7 rounded-md flex items-center justify-center text-stone-200 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
                         </article>
                       );
@@ -2152,16 +2259,16 @@ export const PublicStorefrontPage: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div>
-                    <h2 className="font-display text-xl font-semibold text-slate-900">
+                    <h2 className="font-display text-xl sm:text-2xl font-bold text-[#1C1917] tracking-tight">
                       Book a Room
                     </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-stone-500 mt-0.5">
                       Choose your stay dates to view real-time availability and request an instant
                       booking.
                     </p>
                   </div>
                   {stayNights > 0 && (
-                    <p className="text-xs font-mono text-slate-600 tabular-nums">
+                    <p className="text-xs font-mono text-stone-600 tabular-nums">
                       {availableRoomsForDates.length} of {rooms.length}{' '}
                       {rooms.length === 1 ? 'room' : 'rooms'} available · {stayNights}{' '}
                       {stayNights === 1 ? 'night' : 'nights'}
@@ -2170,11 +2277,11 @@ export const PublicStorefrontPage: React.FC = () => {
                 </div>
 
                 {/* Date Range & Capacity Filter Bar */}
-                <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5">
+                <div className="bg-white border border-stone-200/85 rounded-2xl p-4 sm:p-5 shadow-2xs">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
                     <div className="lg:col-span-4">
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 mb-1.5">
-                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-stone-700 mb-1.5">
+                        <CalendarDays className="w-3.5 h-3.5 text-stone-400" />
                         Check-In Date
                       </label>
                       <input
@@ -2188,13 +2295,13 @@ export const PublicStorefrontPage: React.FC = () => {
                             setCheckOutDate(addDaysIso(nextIn, 1));
                           }
                         }}
-                        className="w-full px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                        className="w-full px-3 py-2 text-sm font-mono bg-white border border-stone-300 rounded-lg focus:border-[#B45309] focus:outline-none"
                       />
                     </div>
 
                     <div className="lg:col-span-4">
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 mb-1.5">
-                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-stone-700 mb-1.5">
+                        <CalendarDays className="w-3.5 h-3.5 text-stone-400" />
                         Check-Out Date
                       </label>
                       <input
@@ -2202,19 +2309,19 @@ export const PublicStorefrontPage: React.FC = () => {
                         min={addDaysIso(checkInDate, 1)}
                         value={checkOutDate}
                         onChange={(e) => setCheckOutDate(e.target.value)}
-                        className="w-full px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none"
+                        className="w-full px-3 py-2 text-sm font-mono bg-white border border-stone-300 rounded-lg focus:border-[#B45309] focus:outline-none"
                       />
                     </div>
 
                     <div className="lg:col-span-2">
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 mb-1.5">
-                        <Users className="w-3.5 h-3.5 text-slate-400" />
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-stone-700 mb-1.5">
+                        <Users className="w-3.5 h-3.5 text-stone-400" />
                         Guests
                       </label>
                       <select
                         value={minGuests}
                         onChange={(e) => setMinGuests(Number(e.target.value))}
-                        className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:border-blue-600 focus:outline-none cursor-pointer"
+                        className="w-full px-3 py-2 text-sm bg-white border border-stone-300 rounded-lg focus:border-[#B45309] focus:outline-none cursor-pointer"
                       >
                         <option value={1}>1+ Guest</option>
                         <option value={2}>2+ Guests</option>
@@ -2224,8 +2331,8 @@ export const PublicStorefrontPage: React.FC = () => {
                     </div>
 
                     <div className="lg:col-span-2 text-left lg:text-right">
-                      <p className="text-xs text-slate-500">Selected Stay</p>
-                      <p className="font-mono text-sm font-semibold text-slate-900 tabular-nums mt-0.5">
+                      <p className="text-xs text-stone-500">Selected Stay</p>
+                      <p className="font-mono text-sm font-semibold text-[#1C1917] tabular-nums mt-0.5">
                         {stayNights > 0
                           ? `${formatShortDate(checkInDate)} – ${formatShortDate(checkOutDate)}`
                           : 'Select valid dates'}
@@ -2235,23 +2342,23 @@ export const PublicStorefrontPage: React.FC = () => {
                 </div>
 
                 {stayNights <= 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-lg py-12 px-6 text-center">
-                    <p className="text-sm font-medium text-slate-900">
+                  <div className="bg-white border border-stone-200/85 rounded-2xl py-12 px-6 text-center">
+                    <p className="text-sm font-medium text-[#1C1917]">
                       Please select a check-out date after check-in
                     </p>
                   </div>
                 ) : rooms.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-lg py-16 px-6 text-center">
-                    <BedDouble className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-900">No rooms listed yet</p>
+                  <div className="bg-white border border-stone-200/85 rounded-2xl py-16 px-6 text-center">
+                    <BedDouble className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-[#1C1917]">No rooms listed yet</p>
                   </div>
                 ) : availableRoomsForDates.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-lg py-14 px-6 text-center">
-                    <BedDouble className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                    <h3 className="text-base font-semibold text-slate-900">
+                  <div className="bg-white border border-stone-200/85 rounded-2xl py-14 px-6 text-center">
+                    <BedDouble className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+                    <h3 className="text-base font-semibold text-[#1C1917]">
                       No rooms available for these dates
                     </h3>
-                    <p className="mt-1.5 text-sm text-slate-600 max-w-md mx-auto">
+                    <p className="mt-1.5 text-sm text-stone-600 max-w-md mx-auto">
                       All matching rooms are already reserved between{' '}
                       <span className="font-mono">{formatShortDate(checkInDate)}</span> and{' '}
                       <span className="font-mono">{formatShortDate(checkOutDate)}</span>. Try
@@ -2259,50 +2366,52 @@ export const PublicStorefrontPage: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {availableRoomsForDates.map((room) => {
                       const stayTotal = room.nightly_rate * stayNights;
                       return (
                         <article
                           key={room.id}
-                          className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col"
+                          className="group bg-white border border-stone-200/85 rounded-2xl overflow-hidden flex flex-col transition-all duration-200 hover:shadow-[0_14px_32px_-12px_rgba(28,25,23,0.14)] hover:border-stone-300/90"
                         >
-                          <SafeImage
-                            src={room.image_url}
-                            alt={room.title}
-                            fallbackIcon="room"
-                            fallbackLabel={`Room ${room.room_number}`}
-                            accentColor={accent}
-                            className="w-full h-48 object-cover border-b border-slate-100"
-                          />
+                          <div className="aspect-[4/3] w-full overflow-hidden bg-stone-100 border-b border-stone-100">
+                            <SafeImage
+                              src={room.image_url}
+                              alt={room.title}
+                              fallbackIcon="room"
+                              fallbackLabel={`Room ${room.room_number}`}
+                              accentColor={accent}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
                           <div className="p-5 flex-1 flex flex-col justify-between gap-4">
                             <div>
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <p className="text-xs text-slate-500 font-mono">
+                                  <p className="text-[11px] uppercase tracking-wider text-stone-400 font-mono">
                                     Room {room.room_number} · {room.room_type}
                                   </p>
-                                  <h3 className="font-display text-base font-semibold text-slate-900 mt-0.5">
+                                  <h3 className="font-display text-base font-semibold text-[#1C1917] mt-1">
                                     {room.title}
                                   </h3>
                                 </div>
-                                <span className="font-mono text-sm font-semibold text-slate-900 tabular-nums shrink-0">
+                                <span className="font-mono text-sm font-semibold text-[#1C1917] tabular-nums shrink-0">
                                   {formatCurrency(room.nightly_rate)}
-                                  <span className="text-[11px] font-normal text-slate-500">/nt</span>
+                                  <span className="text-[11px] font-normal text-stone-500">/nt</span>
                                 </span>
                               </div>
-                              <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                              <p className="mt-2 text-xs text-stone-500 leading-relaxed">
                                 Up to {room.capacity} guests
                                 {room.amenities.length > 0 ? ` · ${room.amenities.join(' · ')}` : ''}
                               </p>
                             </div>
 
-                            <div className="pt-3.5 border-t border-slate-100 space-y-3">
+                            <div className="pt-3.5 border-t border-stone-100 space-y-3">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-emerald-700 font-semibold">
                                   Available for your dates
                                 </span>
-                                <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                                <span className="font-mono font-semibold text-[#1C1917] tabular-nums">
                                   {formatCurrency(stayTotal)} ({stayNights}{' '}
                                   {stayNights === 1 ? 'nt' : 'nts'})
                                 </span>
@@ -2311,8 +2420,7 @@ export const PublicStorefrontPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => openRoomBookingRequest(room)}
-                                className="w-full py-2.5 px-4 text-xs font-semibold text-white rounded-lg hover:opacity-95 transition-opacity cursor-pointer"
-                                style={{ backgroundColor: accent }}
+                                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] rounded-lg transition-colors cursor-pointer"
                               >
                                 Request Booking
                               </button>
@@ -2329,30 +2437,30 @@ export const PublicStorefrontPage: React.FC = () => {
         )}
       </main>
 
-      {/* Compact Mobile-First Floating Bottom Cart Bar (Menu Mode) */}
+      {/* Floating Dark Sticky Cart Bar (Desktop & Mobile) */}
       {canOrder &&
         cartCount > 0 &&
         !trayOpen &&
-        !trackerViewOpen &&
-        activeSection === 'menu' && (
-          <div className="fixed bottom-4 inset-x-4 sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-30">
+        !trackerViewOpen && (
+          <div className="fixed bottom-5 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-30">
             <button
               type="button"
               onClick={openOrderTray}
-              className="w-full px-4 py-3 rounded-xl shadow-lg text-white flex items-center justify-between gap-4 hover:opacity-95 transition-opacity cursor-pointer"
-              style={{ backgroundColor: accent }}
+              className="w-full px-5 py-3.5 rounded-2xl bg-[#1C1917] hover:bg-[#292524] text-white border border-white/10 shadow-[0_20px_44px_-12px_rgba(28,25,23,0.55)] flex items-center justify-between gap-4 hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
             >
-              <div className="flex items-center gap-2.5 text-left">
-                <ShoppingBag className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold">
+              <div className="flex items-center gap-2.5 text-left min-w-0">
+                <span className="w-7 h-7 rounded-lg bg-amber-600/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-xs font-semibold text-stone-100 whitespace-nowrap">
                   {cartCount} {cartCount === 1 ? 'item' : 'items'}
                 </span>
-                <span className="text-white/60">·</span>
-                <span className="font-mono text-sm font-bold tabular-nums">
+                <span className="text-stone-500">·</span>
+                <span className="font-mono text-sm font-bold text-white tabular-nums whitespace-nowrap">
                   {formatCurrency(cartTotal)}
                 </span>
               </div>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1.5 pl-4 border-l border-white/15 text-xs font-semibold text-amber-400 whitespace-nowrap shrink-0">
                 View Order
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
@@ -2364,11 +2472,11 @@ export const PublicStorefrontPage: React.FC = () => {
       {trayOpen && canOrder && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setTrayOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+          <div className="relative z-10 w-full max-w-md glass-drawer h-full flex flex-col">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <h2 className="font-display text-base font-semibold text-slate-900">
                   {confirmingOrderStep ? 'Review & Confirm Order' : 'Your Order'}
@@ -2550,8 +2658,7 @@ export const PublicStorefrontPage: React.FC = () => {
                             <button
                               type="submit"
                               disabled={submitting}
-                              className="flex-1 px-4 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 cursor-pointer"
-                              style={{ backgroundColor: accent }}
+                              className="flex-1 px-4 py-2.5 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
                             >
                               {submitting
                                 ? 'Sending to Kitchen...'
@@ -2567,32 +2674,34 @@ export const PublicStorefrontPage: React.FC = () => {
                 ) : (
                   <>
                     {combiningTracker && (
-                      <div className="p-3.5 rounded-lg bg-blue-50/80 border border-blue-200 space-y-2 text-xs">
+                      <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 space-y-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-blue-950">
+                          <span className="font-semibold text-amber-950">
                             Adding to Active Order {combiningTracker.order_number}
                           </span>
-                          <span className="font-mono font-semibold text-blue-800 tabular-nums">
-                            {combiningTracker.table_or_room}
-                          </span>
+                          {formatDisplayTableLabel(combiningTracker.table_or_room) && (
+                            <span className="font-mono font-semibold text-[#B45309] tabular-nums">
+                              {formatDisplayTableLabel(combiningTracker.table_or_room)}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-blue-900/80 leading-relaxed">
+                        <p className="text-amber-900/80 leading-relaxed">
                           These items will merge into your single running table bill — pay
                           everything at once after your meal is served.
                         </p>
-                        <div className="pt-1.5 border-t border-blue-200/80 space-y-1 font-mono tabular-nums">
-                          <div className="flex items-center justify-between text-blue-900">
+                        <div className="pt-1.5 border-t border-amber-200/80 space-y-1 font-mono tabular-nums">
+                          <div className="flex items-center justify-between text-amber-900">
                             <span>
                               Previous bill (
                               {combiningTracker.items.reduce((s, i) => s + i.quantity, 0)} items)
                             </span>
                             <span>{formatCurrency(combiningTracker.total_amount)}</span>
                           </div>
-                          <div className="flex items-center justify-between text-blue-900">
+                          <div className="flex items-center justify-between text-amber-900">
                             <span>Adding now ({cartCount} items)</span>
                             <span>+{formatCurrency(cartTotal)}</span>
                           </div>
-                          <div className="flex items-center justify-between font-bold text-slate-900 pt-1 border-t border-blue-200/80">
+                          <div className="flex items-center justify-between font-bold text-[#1C1917] pt-1 border-t border-amber-200/80">
                             <span>Combined Running Total</span>
                             <span>{formatCurrency(combiningTracker.total_amount + cartTotal)}</span>
                           </div>
@@ -2827,8 +2936,7 @@ export const PublicStorefrontPage: React.FC = () => {
                             <button
                               type="submit"
                               disabled={submitting}
-                              className="px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 whitespace-nowrap cursor-pointer"
-                              style={{ backgroundColor: accent }}
+                              className="px-5 py-2.5 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] rounded-lg transition-colors disabled:opacity-60 whitespace-nowrap cursor-pointer"
                             >
                               Review & Confirm
                             </button>
@@ -2848,11 +2956,11 @@ export const PublicStorefrontPage: React.FC = () => {
       {bookingRoom && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setBookingRoom(null)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-md glass-drawer h-full flex flex-col">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-base font-semibold text-slate-900">
                   {confirmedBooking ? 'Booking Request Sent' : 'Request Room Booking'}
@@ -3106,8 +3214,7 @@ export const PublicStorefrontPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submittingBooking || stayNights <= 0}
-                    className="px-5 py-2.5 text-xs font-semibold text-white rounded-lg hover:opacity-95 disabled:opacity-60 whitespace-nowrap cursor-pointer"
-                    style={{ backgroundColor: accent }}
+                    className="px-5 py-2.5 text-xs font-semibold text-white bg-[#1C1917] hover:bg-[#292524] rounded-lg transition-colors disabled:opacity-60 whitespace-nowrap cursor-pointer"
                   >
                     {submittingBooking
                       ? 'Submitting...'
@@ -3138,8 +3245,19 @@ export const PublicStorefrontPage: React.FC = () => {
         accentColor={accent}
       />
 
-      <footer className="bg-white border-t border-slate-200 py-5 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-        {shop.name} · Powered by HostGrid
+      <footer className="bg-white/85 border-t border-stone-200/80 py-6 px-4 sm:px-6 lg:px-8 text-xs text-stone-500">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-center">
+          <span className="font-medium text-stone-700">{shop.name}</span>
+          <span className="text-stone-300">·</span>
+          <span>Powered by HostGrid</span>
+          <span className="text-stone-300">·</span>
+          <Link
+            to="/login"
+            className="text-stone-500 hover:text-[#1C1917] transition-colors underline-offset-2 hover:underline"
+          >
+            Staff Login
+          </Link>
+        </div>
       </footer>
     </div>
   );

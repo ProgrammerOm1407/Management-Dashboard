@@ -444,24 +444,24 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-lg font-semibold text-slate-900">
+          <h2 className="font-display text-lg font-semibold text-stone-950 tracking-tight">
             Rooms & Reservations
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-stone-500 mt-0.5">
             Manage room inventory, nightly rates, and incoming guest booking requests for{' '}
             {shop.name}.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
-          <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg">
+          <div className="flex items-center gap-1 p-1 glass-segmented rounded-2xl">
             <button
               type="button"
               onClick={() => setSubTab('inventory')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 subTab === 'inventory'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white/95 text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               Rooms ({rooms.length})
@@ -469,10 +469,10 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
             <button
               type="button"
               onClick={() => setSubTab('bookings')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 subTab === 'bookings'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white/95 text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               Bookings ({bookings.length}
@@ -508,22 +508,22 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
       {loading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-56 bg-white border border-slate-200 rounded-lg animate-pulse" />
+            <div key={i} className="h-56 surface-card rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : subTab === 'inventory' ? (
         rooms.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-lg px-6 py-14 text-center">
-            <BedDouble className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-slate-900">No rooms configured</h3>
-            <p className="mt-1.5 text-sm text-slate-600 max-w-md mx-auto">
+          <div className="surface-card rounded-2xl px-6 py-14 text-center">
+            <BedDouble className="w-8 h-8 text-stone-300 mx-auto mb-3" />
+            <h3 className="text-base font-semibold text-stone-950">No rooms configured</h3>
+            <p className="mt-1.5 text-sm text-stone-600 max-w-md mx-auto">
               Add rooms and suites so guests can check date availability and submit booking requests
               on your public link.
             </p>
             <button
               type="button"
               onClick={openAddRoom}
-              className="mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 cursor-pointer"
+              className="mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-stone-900 rounded-lg hover:bg-stone-800 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Add First Room
@@ -534,16 +534,18 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
             {rooms.map((room) => (
               <div
                 key={room.id}
-                className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col"
+                className="group surface-card-interactive rounded-2xl overflow-hidden flex flex-col"
               >
-                <SafeImage
-                  src={room.image_url}
-                  alt={room.title}
-                  fallbackIcon="room"
-                  fallbackLabel={`Room ${room.room_number}`}
-                  accentColor={shop.primary_color}
-                  className="w-full h-40 object-cover border-b border-slate-200"
-                />
+                <div className="overflow-hidden border-b border-stone-200/80">
+                  <SafeImage
+                    src={room.image_url}
+                    alt={room.title}
+                    fallbackIcon="room"
+                    fallbackLabel={`Room ${room.room_number}`}
+                    accentColor={shop.primary_color}
+                    className="w-full h-44 object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  />
+                </div>
                 <div className="p-4 flex-1 flex flex-col justify-between gap-4">
                   <div>
                     <div className="flex items-start justify-between gap-2">
@@ -606,23 +608,23 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
         )
       ) : (
         /* Bookings List + 14-Day Occupancy Calendar */
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto max-w-full">
+        <div className="surface-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-stone-200/75 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl overflow-x-auto max-w-full">
               {(['all', 'pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'] as const).map(
                 (st) => (
                   <button
                     key={st}
                     type="button"
                     onClick={() => setBookingStatusFilter(st)}
-                    className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer ${
                       bookingStatusFilter === st
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white/95 text-stone-950 shadow-xs'
+                        : 'text-stone-600 hover:text-stone-950'
                     }`}
                   >
                     <span>{st === 'all' ? 'All' : BOOKING_STATUS_LABEL[st]}</span>
-                    <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                    <span className="font-mono text-[11px] text-stone-400 tabular-nums">
                       {bookingCounts[st]}
                     </span>
                   </button>
@@ -630,14 +632,14 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start lg:self-auto shrink-0">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl self-start lg:self-auto shrink-0">
               <button
                 type="button"
                 onClick={() => setBookingViewMode('list')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                   bookingViewMode === 'list'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white/95 text-stone-950 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-950'
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
@@ -646,10 +648,10 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
               <button
                 type="button"
                 onClick={() => setBookingViewMode('calendar')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                   bookingViewMode === 'calendar'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white/95 text-stone-950 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-950'
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
@@ -684,7 +686,7 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-500">
+                    <tr className="border-b border-stone-200/75 bg-stone-100/50 text-xs font-medium text-stone-500">
                       <th className="py-3 px-5">Guest</th>
                       <th className="py-3 px-4">Room</th>
                       <th className="py-3 px-4">Stay Dates</th>
@@ -694,7 +696,7 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
                       <th className="py-3 px-5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 text-sm">
+                  <tbody className="divide-y divide-stone-100 text-sm">
                     {filteredBookings.map((b) => {
                       const nights = Math.max(1, diffNights(b.check_in, b.check_out));
                       const payMethod = getEffectivePaymentMethod(b.payment_method);
@@ -818,7 +820,7 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
                   Add rooms to view the occupancy calendar.
                 </p>
               ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto border border-stone-200/80 bg-white/70 rounded-xl">
                   <table className="w-full border-collapse min-w-[760px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
@@ -898,7 +900,7 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
 
               {/* Selected Booking Detail Strip */}
               {selectedCalendarBooking && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="p-4 bg-white/75 border border-stone-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2.5 text-sm">
                       <span className="font-semibold text-slate-900">
@@ -971,11 +973,11 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
       {roomModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setRoomModalOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-md glass-modal rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
               <h3 className="font-display text-base font-semibold text-slate-900">
                 {editingRoom ? `Edit Room ${editingRoom.room_number}` : 'Add Room'}
               </h3>
@@ -1108,11 +1110,11 @@ export const RoomsManager: React.FC<RoomsManagerProps> = ({
       {bookingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setBookingModalOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-md glass-modal rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
               <h3 className="font-display text-base font-semibold text-slate-900">
                 New Room Booking
               </h3>

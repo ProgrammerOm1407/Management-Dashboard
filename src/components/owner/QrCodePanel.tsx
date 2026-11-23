@@ -15,6 +15,7 @@ import { Shop } from '../../types';
 import { SafeImage } from '../SafeImage';
 import { useToast } from '../../context/ToastContext';
 import { getShopTypeLabel, slugify } from '../../lib/validation';
+import { buildPublicAppUrl } from '../../lib/routing';
 
 interface QrCodePanelProps {
   shop: Shop;
@@ -65,14 +66,13 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
   const accent = shop.primary_color || '#2563EB';
   const singleDisplayTable = useMemo(() => formatSingleDisplayLabel(tableLabel), [tableLabel]);
 
-  const basePrefix = useMemo(() => import.meta.env.BASE_URL.replace(/\/+$/, ''), []);
-
   const targetUrl = useMemo(() => {
-    const base = `${window.location.origin}${basePrefix}/s/${shop.slug}`;
     const trimmedTable = tableLabel.trim();
-    if (!trimmedTable) return base;
-    return `${base}?table=${encodeURIComponent(trimmedTable)}`;
-  }, [basePrefix, shop.slug, tableLabel]);
+    const routePath = trimmedTable
+      ? `/s/${shop.slug}?table=${encodeURIComponent(trimmedTable)}`
+      : `/s/${shop.slug}`;
+    return buildPublicAppUrl(routePath);
+  }, [shop.slug, tableLabel]);
 
   const displayPath = useMemo(() => {
     const base = `/s/${shop.slug}`;
@@ -148,7 +148,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
         const label = `${cleanPrefix} ${num}`;
         const queryValue = isStandardTable ? String(num) : label;
         const displayPathVal = `/s/${shop.slug}?table=${encodeURIComponent(queryValue)}`;
-        const url = `${window.location.origin}${basePrefix}${displayPathVal}`;
+        const url = buildPublicAppUrl(displayPathVal);
         const dataUrl = await QRCode.toDataURL(url, {
           width: 480,
           margin: 2,
@@ -181,7 +181,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
     return () => {
       cancelled = true;
     };
-  }, [mode, basePrefix, shop.slug, batchPrefix, batchRange.start, batchRange.end]);
+  }, [mode, shop.slug, batchPrefix, batchRange.start, batchRange.end]);
 
   const fileSuffix = useMemo(() => {
     const t = slugify(singleDisplayTable);
@@ -439,24 +439,24 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
       {/* Header & Mode Switch */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 print:hidden">
         <div>
-          <h2 className="font-display text-lg font-semibold text-slate-900">
+          <h2 className="font-display text-lg font-semibold text-stone-950 tracking-tight">
             Printable Storefront QR Studio
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-stone-500 mt-0.5">
             Generate print-ready single posters or batch table sheets (1–N) linking directly to{' '}
-            <span className="font-mono text-slate-700">/s/{shop.slug}</span>.
+            <span className="font-mono text-stone-700">/s/{shop.slug}</span>.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg">
+          <div className="inline-flex items-center gap-1 p-1 glass-segmented rounded-2xl">
             <button
               type="button"
               onClick={() => setMode('single')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 mode === 'single'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white/95 text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               <Square className="w-3.5 h-3.5" />
@@ -465,10 +465,10 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
             <button
               type="button"
               onClick={() => setMode('batch')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 mode === 'batch'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white/95 text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               <Grid2x2 className="w-3.5 h-3.5" />
@@ -479,7 +479,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
           <button
             type="button"
             onClick={onOpenStorefront}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-stone-700 bg-white/80 backdrop-blur-sm border border-stone-200/90 rounded-xl hover:bg-white whitespace-nowrap cursor-pointer transition-colors"
           >
             Preview Storefront
             <ExternalLink className="w-3.5 h-3.5" />
@@ -490,10 +490,10 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
       {mode === 'single' ? (
         <div className="grid lg:grid-cols-12 gap-6 items-start">
           {/* Single Poster Controls */}
-          <div className="lg:col-span-5 bg-white border border-slate-200 rounded-lg p-6 space-y-5 print:hidden">
+          <div className="lg:col-span-5 surface-card rounded-2xl p-6 space-y-5 print:hidden">
             <div>
-              <p className="text-xs font-medium text-slate-700 mb-2">Print Format</p>
-              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-lg">
+              <p className="text-xs font-medium text-stone-700 mb-2">Print Format</p>
+              <div className="grid grid-cols-3 gap-1 p-1 glass-segmented rounded-xl">
                 {(
                   [
                     { id: 'tent', label: 'Table Tent' },
@@ -505,10 +505,10 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
                     key={opt.id}
                     type="button"
                     onClick={() => setLayout(opt.id)}
-                    className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    className={`py-1.5 px-2 text-xs font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                       layout === opt.id
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white/95 text-stone-950 shadow-xs'
+                        : 'text-stone-600 hover:text-stone-950'
                     }`}
                   >
                     {opt.label}
@@ -625,9 +625,9 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
           </div>
 
           {/* Right Live Printable Poster Preview */}
-          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-slate-100/80 border border-slate-200 rounded-lg p-6 sm:p-10 print:bg-white print:border-0 print:p-0">
+          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-stone-200/45 backdrop-blur-sm border border-white/70 rounded-2xl p-6 sm:p-10 print:bg-white print:border-0 print:p-0">
             <div
-              className={`print-qr-sheet w-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden text-center transition-all duration-150 ${
+              className={`print-qr-sheet w-full bg-white border border-stone-200/90 rounded-2xl shadow-[0_18px_42px_-16px_rgba(17,19,21,0.18)] overflow-hidden text-center transition-all duration-150 ${
                 layout === 'sticker' ? 'max-w-[360px]' : 'max-w-[420px]'
               }`}
             >
@@ -712,7 +712,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
       ) : (
         /* Batch Table Sheet (1-N) Mode */
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-lg p-5 print:hidden">
+          <div className="surface-card rounded-2xl p-5 print:hidden">
             <div className="grid sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
               <div className="lg:col-span-3">
                 <label className="block text-xs font-medium text-slate-700 mb-1.5">
@@ -793,7 +793,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <div
                   key={n}
-                  className="h-72 bg-white border border-slate-200 rounded-lg animate-pulse"
+                  className="h-72 surface-card rounded-2xl animate-pulse"
                 />
               ))}
             </div>
@@ -802,7 +802,7 @@ export const QrCodePanel: React.FC<QrCodePanelProps> = ({ shop, onOpenStorefront
               {batchItems.map((item) => (
                 <div
                   key={item.num}
-                  className="print-qr-card bg-white border border-slate-200 rounded-lg overflow-hidden text-center flex flex-col justify-between"
+                  className="print-qr-card surface-card rounded-2xl overflow-hidden text-center flex flex-col justify-between"
                 >
                   <div className="h-2 w-full" style={{ backgroundColor: accent }} />
                   <div className="p-5 space-y-3">

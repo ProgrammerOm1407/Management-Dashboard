@@ -191,14 +191,14 @@ export const OrdersOwnerPanel: React.FC<OrdersOwnerPanelProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <h2 className="font-display text-lg font-semibold text-slate-900">
-                Live Orders & Settlement
+              <h2 className="font-display text-xl font-bold text-stone-950 tracking-tight">
+                Live Orders &amp; Settlement
               </h2>
               {isLiveConnected && (
                 <span className="text-xs text-emerald-700 font-medium">· Live sync</span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-stone-500 mt-1">
               Servers advance kitchen stages. Confirm Cash collection or verify UPI transactions in
               Payment Verification to close bills.
             </p>
@@ -208,7 +208,7 @@ export const OrdersOwnerPanel: React.FC<OrdersOwnerPanelProps> = ({
             <button
               type="button"
               onClick={onOpenServerView}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap self-start sm:self-auto cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-stone-700 bg-white border border-stone-300 rounded-lg hover:bg-stone-50 shadow-2xs transition-colors whitespace-nowrap self-start sm:self-auto cursor-pointer"
             >
               Open Kitchen Board
               <ExternalLink className="w-3.5 h-3.5" />
@@ -217,20 +217,20 @@ export const OrdersOwnerPanel: React.FC<OrdersOwnerPanelProps> = ({
         </div>
 
         {/* Filter & Search Bar + Orders Table */}
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="surface-card rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-stone-200/75 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filter by order #, guest, phone, table, or UTR..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-600 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-white/75 border border-stone-200/90 rounded-xl focus:bg-white focus:border-stone-900 focus:outline-none transition-colors"
               />
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto max-w-full">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl overflow-x-auto max-w-full">
               {(
                 [
                   'all',

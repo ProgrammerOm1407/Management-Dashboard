@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Shop } from '../../types';
 import { updateShopBranding, updateShopPaymentSettings } from '../../lib/firestoreService';
+import { buildPublicAppUrl } from '../../lib/routing';
 import { buildUpiPaymentUri, isValidUpiId } from '../../lib/upi';
 import { SafeImage } from '../SafeImage';
 import { useToast } from '../../context/ToastContext';
@@ -100,7 +101,7 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
     };
   }, [validPreviewUpi, upiId, upiPayeeName, shop.name]);
 
-  const publicUrl = `${window.location.origin}/s/${shop.slug}`;
+  const publicUrl = buildPublicAppUrl(`/s/${shop.slug}`);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,8 +160,8 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-lg font-semibold text-slate-900">Shop Settings</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
+        <h2 className="font-display text-lg font-semibold text-stone-950 tracking-tight">Shop Settings</h2>
+        <p className="text-xs text-stone-500 mt-0.5">
           Customize branding, guest-facing storefront appearance, and accepted Cash & UPI payment
           methods.
         </p>
@@ -172,17 +173,17 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
           {/* Payment Settings Card */}
           <form
             onSubmit={(e) => void handleSavePayments(e)}
-            className="bg-white border border-slate-200 rounded-lg p-6 space-y-5"
+            className="surface-card rounded-2xl p-6 space-y-5"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-stone-200/75 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-slate-700" />
-                  <h3 className="font-display text-base font-semibold text-slate-900">
+                  <Wallet className="w-4 h-4 text-stone-700" />
+                  <h3 className="font-display text-base font-semibold text-stone-950">
                     Payment Settings
                   </h3>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-stone-500 mt-0.5">
                   Configure Cash and Dynamic NPCI UPI QR checkout for Food Orders and Hotel Room
                   Bookings.
                 </p>
@@ -204,7 +205,7 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
 
             {/* Cash & UPI Toggles */}
             <div className="grid sm:grid-cols-2 gap-3">
-              <label className="flex items-start gap-3 p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-stone-200/80 bg-white/65 hover:bg-white/90 transition-colors cursor-pointer">
                 <input
                   type="checkbox"
                   checked={acceptCash}
@@ -222,7 +223,7 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 p-3.5 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-stone-200/80 bg-white/65 hover:bg-white/90 transition-colors cursor-pointer">
                 <input
                   type="checkbox"
                   checked={acceptUpi}
@@ -282,7 +283,7 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
 
             {/* Compact Live UPI QR Verification Preview */}
             {validPreviewUpi && previewQr && (
-              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row items-center gap-4">
+              <div className="p-3.5 rounded-xl border border-stone-200/80 bg-white/70 flex flex-col sm:flex-row items-center gap-4">
                 <img
                   src={previewQr}
                   alt="Sample UPI QR code preview"
@@ -318,13 +319,13 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
           {/* Branding Form Card */}
           <form
             onSubmit={(e) => void handleSave(e)}
-            className="bg-white border border-slate-200 rounded-lg p-6 space-y-5"
+            className="surface-card rounded-2xl p-6 space-y-5"
           >
-            <div className="border-b border-slate-100 pb-4">
-              <h3 className="font-display text-base font-semibold text-slate-900">
+            <div className="border-b border-stone-200/75 pb-4">
+              <h3 className="font-display text-base font-semibold text-stone-950">
                 Storefront Branding
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-stone-500 mt-0.5">
                 Controls your venue header, brand color, and guest-facing storefront description.
               </p>
             </div>
@@ -430,9 +431,9 @@ export const ShopSettingsPanel: React.FC<ShopSettingsPanelProps> = ({
 
         {/* Live Brand Preview & Public Link */}
         <div className="lg:col-span-5 space-y-5">
-          <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
-            <p className="text-xs font-medium text-slate-500">Live Brand Header Preview</p>
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
+          <div className="surface-card rounded-2xl p-6 space-y-4">
+            <p className="text-xs font-medium text-stone-500">Live Brand Header Preview</p>
+            <div className="bg-white/80 border border-stone-200/80 rounded-xl overflow-hidden">
               <div className="h-2 w-full" style={{ backgroundColor: primaryColor }} />
               <div className="p-4 flex items-center gap-3.5">
                 {logoUrl ? (

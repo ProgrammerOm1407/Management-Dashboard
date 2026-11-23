@@ -184,12 +184,12 @@ export const CustomerAccountDrawer: React.FC<CustomerAccountDrawerProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
-        className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+        className="fixed inset-0 glass-backdrop"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-md bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
+      <div className="relative z-10 w-full max-w-md glass-drawer h-full flex flex-col">
         {/* Drawer Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+        <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="font-display text-base font-semibold text-slate-900 truncate">
               {customer ? `${shop.name} Member` : `Member Access · ${shop.name}`}
@@ -380,44 +380,44 @@ export const CustomerAccountDrawer: React.FC<CustomerAccountDrawerProps> = ({
             /* STATE 3: Registered Returning Member */
             <div className="space-y-5">
               {/* Rewards & Loyalty KPI Card */}
-              <div className="rounded-xl border border-slate-200 bg-slate-900 text-white p-5 space-y-4">
+              <div className="rounded-2xl glass-obsidian text-white p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">
+                    <p className="text-xs text-stone-400 font-medium">
                       {shop.name} Rewards
                     </p>
-                    <p className="mt-1 font-display text-2xl font-bold font-mono tabular-nums">
+                    <p className="mt-1.5 font-mono text-[28px] leading-none font-bold tabular-nums">
                       {(customer.reward_points || 0).toLocaleString('en-IN')}{' '}
-                      <span className="text-xs font-sans font-medium text-slate-300">pts</span>
+                      <span className="text-xs font-sans font-medium text-stone-300">pts</span>
                     </p>
                   </div>
-                  <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0">
                     <Award className="w-4 h-4 text-amber-300" />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/10 text-xs">
+                <div className="grid grid-cols-2 gap-3 pt-3.5 border-t border-white/10 text-xs">
                   <div>
-                    <p className="text-slate-400 text-[11px]">Settled Orders</p>
+                    <p className="text-stone-400 text-[11px]">Settled Orders</p>
                     <p className="font-mono font-semibold text-white tabular-nums mt-0.5">
                       {customer.total_orders || 0}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-400 text-[11px]">Total Spent</p>
+                    <p className="text-stone-400 text-[11px]">Total Spent</p>
                     <p className="font-mono font-semibold text-white tabular-nums mt-0.5">
                       {formatCurrency(customer.total_spent || 0)}
                     </p>
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-300">
-                  Rewards program ready · Earn 1 pt per ₹10 paid on settled bills.
+                <p className="text-[11px] text-stone-300">
+                  Earn 1 reward point per ₹10 paid on every settled bill.
                 </p>
               </div>
 
               {/* Member Profile / Edit Form */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+              <div className="rounded-2xl border border-stone-200/80 bg-white/75 backdrop-blur-sm p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-slate-900">Verified Member Details</p>
                   {!editingProfile && (
@@ -553,7 +553,7 @@ export const CustomerAccountDrawer: React.FC<CustomerAccountDrawerProps> = ({
                       return (
                         <li
                           key={ord.id}
-                          className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2"
+                          className="p-3.5 rounded-2xl border border-stone-200/80 bg-white/75 backdrop-blur-sm space-y-2"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">

@@ -20,7 +20,7 @@ import {
   updateMenuItemStock,
 } from '../../lib/firestoreService';
 import { formatCurrency } from '../../lib/validation';
-import { SafeImage } from '../SafeImage';
+import { resolveDishImage, SafeImage } from '../SafeImage';
 import { useToast } from '../../context/ToastContext';
 
 interface MenuManagerProps {
@@ -351,15 +351,15 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h2 className="font-display text-lg font-semibold text-slate-900">Menu Catalog</h2>
+            <h2 className="font-display text-lg font-semibold text-stone-950 tracking-tight">Menu Catalog</h2>
             {readOnly && (
-              <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1 text-xs text-stone-500">
                 <Lock className="w-3.5 h-3.5" />
                 Read-only for servers
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-stone-500 mt-0.5">
             {readOnly
               ? 'Reference active menu items, pricing, and remaining stock counts while taking orders.'
               : 'Manage menu offerings, update manual inventory counts, and catch low or out-of-stock items.'}
@@ -381,7 +381,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
 
       {/* Low Stock / Out of Stock Alert Banner */}
       {!loading && (stockSummary.lowStock > 0 || stockSummary.outOfStock > 0) && (
-        <div className="bg-amber-50/70 border border-amber-200 rounded-lg px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-amber-50/75 backdrop-blur-sm border border-amber-200/80 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start sm:items-center gap-2.5 text-xs">
             <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5 sm:mt-0" />
             <div className="text-slate-800">
@@ -433,30 +433,30 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
       )}
 
       {/* Filter Toolbar & Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-slate-200 space-y-3">
+      <div className="surface-card rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-stone-200/75 space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search dishes, beverages, or categories..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-600 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-white/75 border border-stone-200/80 rounded-xl focus:bg-white focus:border-stone-900 focus:outline-none transition-colors"
               />
             </div>
 
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto max-w-full">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl overflow-x-auto max-w-full">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                     selectedCategory === cat
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white/95 text-stone-950 shadow-xs'
+                      : 'text-stone-600 hover:text-stone-950'
                   }`}
                 >
                   {cat}
@@ -466,8 +466,8 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
           </div>
 
           {/* Inventory Status Filter Row */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto max-w-full">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-stone-200/60">
+            <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl overflow-x-auto max-w-full">
               {(
                 [
                   { id: 'all', label: 'All Items', count: stockSummary.total },
@@ -480,10 +480,10 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setStockFilter(tab.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                     stockFilter === tab.id
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-white/95 text-stone-950 shadow-xs'
+                      : 'text-stone-600 hover:text-stone-950'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -558,7 +558,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-medium text-slate-500">
+                <tr className="border-b border-stone-200/75 bg-stone-100/50 text-xs font-medium text-stone-500">
                   <th className="py-3 px-5">Item</th>
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4 text-right">Price</th>
@@ -567,7 +567,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
                   {!readOnly && <th className="py-3 px-5 text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 text-sm">
+              <tbody className="divide-y divide-stone-100 text-sm">
                 {filteredItems.map((item) => {
                   const meta = getMenuStockMeta(item);
                   const isBusy = updatingStockId === item.id;
@@ -590,7 +590,7 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-3 min-w-[220px]">
                           <SafeImage
-                            src={item.image_url}
+                            src={resolveDishImage(item.name, item.image_url)}
                             alt={item.name}
                             fallbackIcon="menu"
                             accentColor={shop.primary_color}
@@ -824,11 +824,11 @@ export const MenuManager: React.FC<MenuManagerProps> = ({
       {!readOnly && modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setModalOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div className="relative z-10 w-full max-w-md glass-modal rounded-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base font-semibold text-slate-900">
                 {editingItem ? 'Edit Menu Item' : 'New Menu Item'}
               </h3>

@@ -904,12 +904,12 @@ export const ServerPage: React.FC = () => {
 
             {/* Interactive Batch-Cooking Prep Queue (Pending + Preparing Aggregated) */}
             {prepQueue.length > 0 && boardFilter !== 'history' && (
-              <div className="bg-slate-900 text-white rounded-lg px-4 py-3 space-y-2.5">
+              <div className="glass-obsidian text-white rounded-2xl px-4 py-3.5 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-xs font-semibold">
                     <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>Batch Prep Queue</span>
-                    <span className="text-[11px] font-normal text-slate-400 hidden sm:inline">
+                    <span className="text-[11px] font-normal text-stone-400 hidden sm:inline">
                       · Click a dish to focus matching tickets
                     </span>
                   </div>
@@ -923,7 +923,7 @@ export const ServerPage: React.FC = () => {
                         Clear filter ({selectedDishFilter})
                       </button>
                     )}
-                    <span className="font-mono text-[11px] text-slate-300 tabular-nums">
+                    <span className="font-mono text-[11px] text-stone-300 tabular-nums">
                       {totalPrepUnits} {totalPrepUnits === 1 ? 'portion' : 'portions'} ·{' '}
                       {prepQueue.length} {prepQueue.length === 1 ? 'dish' : 'dishes'}
                     </span>
@@ -940,15 +940,15 @@ export const ServerPage: React.FC = () => {
                           setSelectedDishFilter((prev) => (prev === item.name ? null : item.name))
                         }
                         title={`${item.pendingQty} pending · ${item.preparingQty} preparing`}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border transition-colors cursor-pointer ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-all duration-150 cursor-pointer ${
                           isSelected
-                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-semibold'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700'
+                            ? 'bg-amber-400 text-stone-950 border-amber-300 font-semibold shadow-xs'
+                            : 'bg-[#1A1D21] hover:bg-[#23272D] text-stone-100 border-[#2C3138]'
                         }`}
                       >
                         <span
                           className={`font-mono font-bold tabular-nums ${
-                            isSelected ? 'text-slate-950' : 'text-amber-300'
+                            isSelected ? 'text-stone-950' : 'text-amber-300'
                           }`}
                         >
                           {item.totalQty}×
@@ -958,7 +958,7 @@ export const ServerPage: React.FC = () => {
                     );
                   })}
                   {prepQueue.length > 14 && (
-                    <span className="text-[11px] text-slate-400 pl-1">
+                    <span className="text-[11px] text-stone-400 pl-1">
                       +{prepQueue.length - 14} more
                     </span>
                   )}
@@ -968,7 +968,7 @@ export const ServerPage: React.FC = () => {
 
             {/* Stage Filter Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg overflow-x-auto max-w-full">
+              <div className="flex items-center gap-1 p-1 glass-segmented rounded-2xl overflow-x-auto max-w-full">
                 {(
                   [
                     { id: 'all', label: `All Kitchen (${kitchenMetrics.activeKitchenTotal})` },
@@ -989,12 +989,12 @@ export const ServerPage: React.FC = () => {
                     key={tab.id}
                     type="button"
                     onClick={() => setBoardFilter(tab.id)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer ${
                       boardFilter === tab.id
-                        ? 'bg-white text-slate-900 shadow-xs'
+                        ? 'bg-white text-stone-950 shadow-xs font-semibold'
                         : tab.id === 'urgent' && kitchenMetrics.urgentCount > 0
                           ? 'text-red-700 font-semibold hover:text-red-800'
-                          : 'text-slate-600 hover:text-slate-900'
+                          : 'text-stone-600 hover:text-stone-950'
                     }`}
                   >
                     {tab.label}
@@ -1008,14 +1008,14 @@ export const ServerPage: React.FC = () => {
                 {[1, 2, 3].map((col) => (
                   <div
                     key={col}
-                    className="h-72 bg-white border border-slate-200 rounded-lg animate-pulse"
+                    className="h-72 surface-card rounded-2xl animate-pulse"
                   />
                 ))}
               </div>
             ) : boardFilter === 'history' ? (
               /* Settled & Cancelled History Table */
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between">
+              <div className="surface-card rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-200/75 bg-stone-50/55 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                     <History className="w-4 h-4 text-slate-500" />
                     <span>Paid & Cancelled Tickets</span>
@@ -1123,16 +1123,24 @@ export const ServerPage: React.FC = () => {
                   );
                   const meta = STATUS_META[stage];
 
+                  const stageTopAccent =
+                    stage === 'pending'
+                      ? 'bg-amber-500'
+                      : stage === 'preparing'
+                        ? 'bg-blue-600'
+                        : 'bg-emerald-600';
+
                   return (
                     <div
                       key={stage}
-                      className="bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col"
+                      className="surface-card rounded-2xl overflow-hidden flex flex-col"
                     >
-                      <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between gap-2">
-                        <h3 className={`font-display text-xs font-semibold ${meta.headerColor}`}>
+                      <div className={`h-1 w-full ${stageTopAccent}`} />
+                      <div className="px-4 py-3 border-b border-stone-200/75 bg-stone-50/55 flex items-center justify-between gap-2">
+                        <h3 className={`font-display text-xs font-bold ${meta.headerColor}`}>
                           {meta.label}
                         </h3>
-                        <span className="font-mono text-[11px] font-semibold text-slate-600 tabular-nums whitespace-nowrap">
+                        <span className="font-mono text-[11px] font-semibold text-stone-600 tabular-nums whitespace-nowrap">
                           {stageOrders.length} {stageOrders.length === 1 ? 'ticket' : 'tickets'}
                           {columnUnits > 0 ? ` · ${columnUnits} items` : ''}
                         </span>
@@ -1374,11 +1382,11 @@ export const ServerPage: React.FC = () => {
       {newOrderOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="fixed inset-0 glass-backdrop"
             onClick={() => setNewOrderOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-lg bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-lg glass-drawer h-full flex flex-col">
+            <div className="px-6 py-4 border-b border-stone-200/75 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-base font-semibold text-slate-900">
                   Create Server Order

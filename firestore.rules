@@ -82,6 +82,16 @@ service cloud.firestore {
     function isShopStaff(shopId) {
       return isShopOwner(shopId) || isShopServer(shopId);
     }
+    function isOrderAfterPendingWithTotal(shopId, orderId, expectedTotal) {
+      let afterOrder = getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data;
+      return afterOrder.total_amount == expectedTotal && afterOrder.status == 'pending';
+    }
+    function isOrderAfterMatchingPayment(shopId, orderId, expectedMethod, expectedPayStatus, expectedTotal) {
+      let afterOrder = getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data;
+      return afterOrder.payment_method == expectedMethod
+        && afterOrder.payment_status == expectedPayStatus
+        && afterOrder.total_amount == expectedTotal;
+    }
 
     // -------------------------------------------------------------------------
     // Entity Validation Blueprints
@@ -562,8 +572,8 @@ service cloud.firestore {
           && isValidId(orderId)
           && (
             isSuperAdmin()
-            || isShopStaff(shopId)
             || (existing().source == 'guest' && existing().created_by_uid == request.auth.uid)
+            || isShopStaff(shopId)
           );
         allow list: if isSuperAdmin()
           || (isVerifiedUser() && resource.data.shop_id == shopId && isShopStaff(shopId))
@@ -600,105 +610,92 @@ service cloud.firestore {
           && incoming().updated_at == request.time
           && (
             (
+              existing().source == 'guest'
+              && incoming().source == 'guest'
+              && incoming().customer_name == existing().customer_name
+              && incoming().table_or_room == existing().table_or_room
+              && incoming().created_by_uid == existing().created_by_uid
+              && (
+                (
+                  existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().status == existing().status
+                  && incoming().total_amount == existing().total_amount
+                  && incoming().notes == existing().notes
+                  && incoming().payment_method in ['cash', 'upi']
+                  && incoming().payment_status in ['unpaid', 'verification_pending']
+                  && (!('paid_at' in incoming()) || incoming().paid_at == null)
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+                )
+                || (
+                  existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && incoming().status == 'pending'
+                  && incoming().items.size() >= existing().items.size()
+                  && incoming().total_amount >= existing().total_amount
+                  && (!('paid_at' in incoming()) || incoming().paid_at == null)
+                  && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'notes', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+                )
+                || (
+                  existing().status == 'pending'
+                  && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
+                  && incoming().status == 'cancelled'
+                  && incoming().total_amount == existing().total_amount
+                  && incoming().notes == existing().notes
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                )
+              )
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+            )
+            || (
               isVerifiedUser()
               && (
                 isSuperAdmin()
                 || (
-                  isShopStaff(shopId)
-                  && existing().status != 'paid'
+                  existing().status != 'paid'
                   && existing().status != 'cancelled'
                   && isValidKitchenOrderTransition(existing().status, incoming().status)
                   && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                  && isShopStaff(shopId)
                 )
                 || (
                   isShopOwner(shopId)
-                  && existing().status != 'paid'
-                  && existing().status != 'cancelled'
-                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-                  && incoming().status == 'cancelled'
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status == 'served'
-                  && incoming().status == 'paid'
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status == 'served'
-                  && incoming().status == 'paid'
-                  && incoming().payment_status == 'paid'
-                  && incoming().payment_method in ['cash', 'upi']
-                  && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status != 'cancelled'
-                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-                  && incoming().payment_status == 'paid'
-                  && incoming().payment_method in ['cash', 'upi']
-                  && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+                  && (
+                    (
+                      existing().status != 'paid'
+                      && existing().status != 'cancelled'
+                      && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                      && incoming().status == 'cancelled'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                    )
+                    || (
+                      existing().status == 'served'
+                      && incoming().status == 'paid'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                    )
+                    || (
+                      existing().status == 'served'
+                      && incoming().status == 'paid'
+                      && incoming().payment_status == 'paid'
+                      && incoming().payment_method in ['cash', 'upi']
+                      && incoming().paid_at == request.time
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+                    )
+                    || (
+                      existing().status != 'cancelled'
+                      && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                      && incoming().payment_status == 'paid'
+                      && incoming().payment_method in ['cash', 'upi']
+                      && incoming().paid_at == request.time
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
+                    )
+                  )
                 )
               )
-            )
-            || (
-              existing().source == 'guest'
-              && existing().status != 'paid'
-              && existing().status != 'cancelled'
-              && incoming().source == 'guest'
-              && incoming().customer_name == existing().customer_name
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().created_by_uid == existing().created_by_uid
-              && incoming().status == 'pending'
-              && incoming().items.size() >= existing().items.size()
-              && incoming().total_amount >= existing().total_amount
-              && (!('paid_at' in incoming()) || incoming().paid_at == null)
-              && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
-              && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'notes', 'payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
-            )
-            || (
-              existing().source == 'guest'
-              && existing().status != 'paid'
-              && existing().status != 'cancelled'
-              && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-              && incoming().source == 'guest'
-              && incoming().customer_name == existing().customer_name
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().created_by_uid == existing().created_by_uid
-              && incoming().status == existing().status
-              && incoming().items == existing().items
-              && incoming().total_amount == existing().total_amount
-              && incoming().notes == existing().notes
-              && incoming().payment_method in ['cash', 'upi']
-              && incoming().payment_status in ['unpaid', 'verification_pending']
-              && (!('paid_at' in incoming()) || incoming().paid_at == null)
-              && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'utr_number', 'paid_at', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
-            )
-            || (
-              existing().source == 'guest'
-              && existing().status == 'pending'
-              && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
-              && incoming().source == 'guest'
-              && incoming().customer_name == existing().customer_name
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().created_by_uid == existing().created_by_uid
-              && incoming().status == 'cancelled'
-              && incoming().items == existing().items
-              && incoming().total_amount == existing().total_amount
-              && incoming().notes == existing().notes
-              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
             )
           );
         allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(orderId);
@@ -730,97 +727,89 @@ service cloud.firestore {
           && incoming().updated_at == request.time
           && (
             (
+              incoming().table_or_room == existing().table_or_room
+              && (
+                (
+                  existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                  && incoming().status == existing().status
+                  && incoming().total_amount == existing().total_amount
+                  && incoming().payment_method in ['cash', 'upi']
+                  && incoming().payment_status in ['unpaid', 'verification_pending']
+                  && (!('paid_at' in incoming()) || incoming().paid_at == null)
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
+                  && isOrderAfterMatchingPayment(shopId, orderId, incoming().payment_method, incoming().payment_status, existing().total_amount)
+                )
+                || (
+                  existing().status != 'paid'
+                  && existing().status != 'cancelled'
+                  && incoming().status == 'pending'
+                  && incoming().items.size() >= existing().items.size()
+                  && incoming().total_amount >= existing().total_amount
+                  && (!('paid_at' in incoming()) || incoming().paid_at == null)
+                  && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
+                  && isOrderAfterPendingWithTotal(shopId, orderId, incoming().total_amount)
+                )
+                || (
+                  existing().status == 'pending'
+                  && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
+                  && incoming().status == 'cancelled'
+                  && incoming().total_amount == existing().total_amount
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                  && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.status == 'cancelled'
+                )
+              )
+              && exists(/databases/$(database)/documents/shops/$(shopId))
+              && shopDoc(shopId).data.is_active == true
+              && shopDoc(shopId).data.modules.orders == true
+            )
+            || (
               isVerifiedUser()
               && (
                 isSuperAdmin()
                 || (
-                  isShopStaff(shopId)
-                  && existing().status != 'paid'
+                  existing().status != 'paid'
                   && existing().status != 'cancelled'
                   && isValidKitchenOrderTransition(existing().status, incoming().status)
                   && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                  && isShopStaff(shopId)
                 )
                 || (
                   isShopOwner(shopId)
-                  && existing().status != 'paid'
-                  && existing().status != 'cancelled'
-                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-                  && incoming().status == 'cancelled'
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status == 'served'
-                  && incoming().status == 'paid'
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status == 'served'
-                  && incoming().status == 'paid'
-                  && incoming().payment_status == 'paid'
-                  && incoming().payment_method in ['cash', 'upi']
-                  && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
-                )
-                || (
-                  isShopOwner(shopId)
-                  && existing().status != 'cancelled'
-                  && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-                  && incoming().payment_status == 'paid'
-                  && incoming().payment_method in ['cash', 'upi']
-                  && incoming().paid_at == request.time
-                  && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
+                  && (
+                    (
+                      existing().status != 'paid'
+                      && existing().status != 'cancelled'
+                      && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                      && incoming().status == 'cancelled'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                    )
+                    || (
+                      existing().status == 'served'
+                      && incoming().status == 'paid'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
+                    )
+                    || (
+                      existing().status == 'served'
+                      && incoming().status == 'paid'
+                      && incoming().payment_status == 'paid'
+                      && incoming().payment_method in ['cash', 'upi']
+                      && incoming().paid_at == request.time
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
+                    )
+                    || (
+                      existing().status != 'cancelled'
+                      && (!('payment_status' in existing()) || existing().payment_status != 'paid')
+                      && incoming().payment_status == 'paid'
+                      && incoming().payment_method in ['cash', 'upi']
+                      && incoming().paid_at == request.time
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
+                    )
+                  )
                 )
               )
-            )
-            || (
-              existing().status != 'paid'
-              && existing().status != 'cancelled'
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().status == 'pending'
-              && incoming().items.size() >= existing().items.size()
-              && incoming().total_amount >= existing().total_amount
-              && (!('paid_at' in incoming()) || incoming().paid_at == null)
-              && (!('payment_status' in incoming()) || incoming().payment_status in ['unpaid', 'verification_pending'])
-              && incoming().diff(existing()).affectedKeys().hasOnly(['items', 'total_amount', 'status', 'payment_method', 'payment_status', 'paid_at', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.total_amount == incoming().total_amount
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.status == 'pending'
-            )
-            || (
-              existing().status != 'paid'
-              && existing().status != 'cancelled'
-              && (!('payment_status' in existing()) || existing().payment_status != 'paid')
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().status == existing().status
-              && incoming().items == existing().items
-              && incoming().total_amount == existing().total_amount
-              && incoming().payment_method in ['cash', 'upi']
-              && incoming().payment_status in ['unpaid', 'verification_pending']
-              && (!('paid_at' in incoming()) || incoming().paid_at == null)
-              && incoming().diff(existing()).affectedKeys().hasOnly(['payment_method', 'payment_status', 'paid_at', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_method == incoming().payment_method
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.payment_status == incoming().payment_status
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.total_amount == existing().total_amount
-            )
-            || (
-              existing().status == 'pending'
-              && (!('payment_status' in existing()) || existing().payment_status == 'unpaid')
-              && incoming().table_or_room == existing().table_or_room
-              && incoming().status == 'cancelled'
-              && incoming().items == existing().items
-              && incoming().total_amount == existing().total_amount
-              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updated_at'])
-              && exists(/databases/$(database)/documents/shops/$(shopId))
-              && shopDoc(shopId).data.is_active == true
-              && shopDoc(shopId).data.modules.orders == true
-              && getAfter(/databases/$(database)/documents/shops/$(shopId)/orders/$(orderId)).data.status == 'cancelled'
             )
           );
         allow delete: if isSuperAdmin() && isValidId(shopId) && isValidId(orderId);
@@ -969,7 +958,7 @@ service cloud.firestore {
         allow get: if isVerifiedUser()
           && isValidId(shopId)
           && isValidId(customerId)
-          && (isSuperAdmin() || isShopStaff(shopId) || request.auth.uid == customerId);
+          && (request.auth.uid == customerId || isSuperAdmin() || isShopStaff(shopId));
         allow list: if isSuperAdmin()
           || (isVerifiedUser() && resource.data.shop_id == shopId && isShopOwner(shopId));
         allow create: if isVerifiedUser()

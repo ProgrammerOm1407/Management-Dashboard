@@ -240,7 +240,7 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg self-start sm:self-auto">
+        <div className="flex items-center gap-1 p-1 glass-segmented rounded-2xl self-start sm:self-auto">
           {(
             [
               { id: 'today', label: 'Today' },
@@ -253,10 +253,10 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
               key={tf.id}
               type="button"
               onClick={() => setTimeframe(tf.id)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 timeframe === tf.id
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white text-stone-950 shadow-xs font-semibold'
+                  : 'text-stone-600 hover:text-stone-950'
               }`}
             >
               {tf.label}
@@ -267,46 +267,46 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
 
       {/* 4-Column Collection KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Total Collected</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-slate-900 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Total Collected</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-stone-950 tabular-nums">
             {formatCurrency(totals.totalCollected)}
           </p>
-          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+          <p className="mt-2.5 text-xs text-stone-500 tabular-nums">
             {totals.totalPaidCount} confirmed {totals.totalPaidCount === 1 ? 'payment' : 'payments'}
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Cash Collected</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-emerald-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Cash Collected</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-emerald-700 tabular-nums">
             {formatCurrency(totals.cashCollected)}
           </p>
-          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+          <p className="mt-2.5 text-xs text-stone-500 tabular-nums">
             {totals.cashCount} settled · {totals.cashShare}% share
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">UPI Collected</p>
-          <p className="mt-2 font-mono text-2xl font-semibold text-blue-700 tabular-nums">
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">UPI Collected</p>
+          <p className="mt-2.5 font-mono text-[26px] leading-none font-semibold text-blue-700 tabular-nums">
             {formatCurrency(totals.upiCollected)}
           </p>
-          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+          <p className="mt-2.5 text-xs text-stone-500 tabular-nums">
             {totals.upiCount} verified · {totals.upiShare}% share
           </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <p className="text-xs font-medium text-slate-500">Pending UPI Verification</p>
+        <div className="surface-card rounded-2xl p-5 sm:p-6">
+          <p className="text-xs font-medium text-stone-500">Pending UPI Verification</p>
           <p
-            className={`mt-2 font-mono text-2xl font-semibold tabular-nums ${
-              totals.pendingUpiCount > 0 ? 'text-amber-700' : 'text-slate-900'
+            className={`mt-2.5 font-mono text-[26px] leading-none font-semibold tabular-nums ${
+              totals.pendingUpiCount > 0 ? 'text-amber-700' : 'text-stone-950'
             }`}
           >
             {formatCurrency(totals.pendingUpiAmount)}
           </p>
-          <p className="mt-1 text-xs text-slate-500 tabular-nums">
+          <p className="mt-2.5 text-xs text-stone-500 tabular-nums">
             {totals.pendingUpiCount > 0 ? (
               <button
                 type="button"
@@ -323,20 +323,20 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
       </div>
 
       {/* Cash vs UPI Proportional Collection Split Bar */}
-      <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
+      <div className="surface-card rounded-2xl p-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <span className="font-medium text-slate-700">Collection Breakdown (Cash vs. UPI)</span>
+          <span className="font-semibold text-stone-800">Collection Breakdown (Cash vs. UPI)</span>
           <div className="flex items-center gap-4 font-mono tabular-nums">
             <span className="text-emerald-700 font-semibold">
               Cash: {formatCurrency(totals.cashCollected)} ({totals.cashShare}%)
             </span>
-            <span className="text-slate-300">·</span>
+            <span className="text-stone-300">·</span>
             <span className="text-blue-700 font-semibold">
               UPI: {formatCurrency(totals.upiCollected)} ({totals.upiShare}%)
             </span>
           </div>
         </div>
-        <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+        <div className="h-2.5 w-full bg-stone-100 rounded-full overflow-hidden flex">
           {totals.totalCollected > 0 ? (
             <>
               <div
@@ -351,34 +351,34 @@ export const SalesRegisterPanel: React.FC<SalesRegisterPanelProps> = ({
               />
             </>
           ) : (
-            <div className="h-full w-full bg-slate-200/70" />
+            <div className="h-full w-full bg-stone-200/70" />
           )}
         </div>
         {totals.unpaidCashCount > 0 && (
-          <p className="text-[11px] text-slate-500 font-mono tabular-nums">
+          <p className="text-[11px] text-stone-500 font-mono tabular-nums">
             Unsettled counter / desk cash bills in this timeframe: {formatCurrency(totals.unpaidCashAmount)} ({totals.unpaidCashCount} open)
           </p>
         )}
       </div>
 
       {/* Ledger Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-slate-200 space-y-3">
+      <div className="surface-card rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-stone-200/75 space-y-3">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search order #, guest, room, or UTR..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-blue-600 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-white/75 border border-stone-200/90 rounded-xl focus:bg-white focus:border-stone-900 focus:outline-none transition-colors"
               />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {shop.modules.rooms && (
-                <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                <div className="flex items-center gap-1 p-1 glass-segmented rounded-xl">
                   {(
                     [
                       { id: 'all', label: 'All Sources' },
